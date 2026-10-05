@@ -7,7 +7,11 @@ export type CategoryKind = 'ingreso' | 'gasto'
 export type Settings = {
   user_id: string
   base_currency: Currency
+  // Expresado en salary_currency
   monthly_salary: number
+  salary_currency: Currency
+  // TRM conservadora (COP por 1 USD) para planear cuando el salario es en USD
+  planning_fx_rate: number | null
   needs_pct: number
   wants_pct: number
   savings_pct: number

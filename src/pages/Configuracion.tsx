@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
+import { fetchLatestTrm, type Trm } from '../lib/trm'
 import {
   budgetGroupLabels,
   type BudgetGroup,
   type Category,
   type CategoryKind,
+  type Currency,
   type Settings,
 } from '../lib/types'
 
@@ -55,6 +57,9 @@ export default function Configuracion() {
   )
 }
 
+// 0.3 -> "30" (evita 30.000000000000004)
+const toPctInput = (v: number) => String(Math.round(v * 10000) / 100)
+
 function SettingsCard({
   settings,
   onSaved,
@@ -62,15 +67,28 @@ function SettingsCard({
   settings: Settings
   onSaved: (s: Settings) => void
 }) {
+  const [currency, setCurrency] = useState<Currency>(settings.salary_currency)
   const [salary, setSalary] = useState(String(settings.monthly_salary))
+  const [planningRate, setPlanningRate] = useState(String(settings.planning_fx_rate ?? ''))
   // Los porcentajes se editan como números enteros (50 = 50%)
-  const [needs, setNeeds] = useState(String(settings.needs_pct * 100))
-  const [wants, setWants] = useState(String(settings.wants_pct * 100))
-  const [savings, setSavings] = useState(String(settings.savings_pct * 100))
+  const [needs, setNeeds] = useState(toPctInput(settings.needs_pct))
+  const [wants, setWants] = useState(toPctInput(settings.wants_pct))
+  const [savings, setSavings] = useState(toPctInput(settings.savings_pct))
+  const [trm, setTrm] = useState<Trm | null>(null)
   const [status, setStatus] = useState<string | null>(null)
 
+  useEffect(() => {
+    fetchLatestTrm()
+      .then(setTrm)
+      .catch(() => setTrm(null))
+  }, [])
+
+  const isUsd = currency === 'USD'
   const total = Number(needs) + Number(wants) + Number(savings)
   const totalOk = Math.abs(total - 100) < 0.001
+  const rateOk = !isUsd || Number(planningRate) > 0
+  // Todo el presupuesto se planea en pesos
+  const salaryCop = isUsd ? Number(salary) * Number(planningRate) : Number(salary)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -78,6 +96,8 @@ function SettingsCard({
       .from('settings')
       .update({
         monthly_salary: Number(salary),
+        salary_currency: currency,
+        planning_fx_rate: planningRate ? Number(planningRate) : null,
         needs_pct: Number(needs) / 100,
         wants_pct: Number(wants) / 100,
         savings_pct: Number(savings) / 100,
@@ -99,28 +119,78 @@ function SettingsCard({
       <h2>Salario y metas 50/30/20</h2>
       <div className="grid-4">
         <div className="field">
-          <label htmlFor="salary">Salario mensual (COP)</label>
+          <label htmlFor="salary-currency">Moneda del salario</label>
+          <select
+            id="salary-currency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value as Currency)}
+          >
+            <option value="COP">Pesos (COP)</option>
+            <option value="USD">Dólares (USD)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="salary">Salario mensual ({currency})</label>
           <input
             id="salary"
             type="number"
             min="0"
-            step="1000"
+            step={isUsd ? '1' : '1000'}
             value={salary}
             onChange={(e) => setSalary(e.target.value)}
           />
-          <small className="muted">{formatMoney(Number(salary))}</small>
+          <small className="muted">{formatMoney(Number(salary), currency)}</small>
         </div>
-        <PctField id="needs" label="Necesidades %" value={needs} onChange={setNeeds} salary={salary} />
-        <PctField id="wants" label="Deseos %" value={wants} onChange={setWants} salary={salary} />
-        <PctField id="savings" label="Ahorro / Inversión %" value={savings} onChange={setSavings} salary={salary} />
+        {isUsd && (
+          <div className="field">
+            <label htmlFor="planning-rate">TRM de planeación</label>
+            <input
+              id="planning-rate"
+              type="number"
+              min="1"
+              step="1"
+              value={planningRate}
+              onChange={(e) => setPlanningRate(e.target.value)}
+            />
+            <small className="muted">
+              {trm ? (
+                <>
+                  TRM oficial hoy: {formatMoney(trm.rate)}{' '}
+                  <button
+                    type="button"
+                    className="link-btn small"
+                    onClick={() => setPlanningRate(String(Math.floor(trm.rate * 0.95)))}
+                  >
+                    Usar 5% menos
+                  </button>
+                </>
+              ) : (
+                'Usa una tasa un poco menor a la TRM actual'
+              )}
+            </small>
+          </div>
+        )}
+        {isUsd && (
+          <div className="field">
+            <label>Salario para planear (COP)</label>
+            <div className="static-value">{rateOk ? formatMoney(salaryCop) : '—'}</div>
+            <small className="muted">Salario × TRM de planeación</small>
+          </div>
+        )}
+      </div>
+      <div className="grid-4">
+        <PctField id="needs" label="Necesidades %" value={needs} onChange={setNeeds} salaryCop={salaryCop} />
+        <PctField id="wants" label="Deseos %" value={wants} onChange={setWants} salaryCop={salaryCop} />
+        <PctField id="savings" label="Ahorro / Inversión %" value={savings} onChange={setSavings} salaryCop={salaryCop} />
       </div>
       <div className="row">
         <span className={totalOk ? 'muted' : 'error'}>
           Total: {total}% {totalOk ? '' : '— debe sumar 100%'}
         </span>
+        {!rateOk && <span className="error">Falta la TRM de planeación</span>}
         <span className="spacer" />
         {status && <span className="muted">{status}</span>}
-        <button className="btn" type="submit" disabled={!totalOk}>
+        <button className="btn" type="submit" disabled={!totalOk || !rateOk}>
           Guardar
         </button>
       </div>
@@ -132,7 +202,7 @@ function PctField(props: {
   id: string
   label: string
   value: string
-  salary: string
+  salaryCop: number
   onChange: (v: string) => void
 }) {
   return (
@@ -148,7 +218,7 @@ function PctField(props: {
         onChange={(e) => props.onChange(e.target.value)}
       />
       <small className="muted">
-        {formatMoney((Number(props.salary) * Number(props.value)) / 100)} al mes
+        {formatMoney((props.salaryCop * Number(props.value)) / 100)} al mes
       </small>
     </div>
   )

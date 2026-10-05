@@ -383,3 +383,17 @@ select.inline-input {
 .link-btn:hover {
   color: var(--accent);
 }
+
+.field select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-h);
+  padding: 0.6rem 0.75rem;
+}
+
+.static-value {
+  color: var(--text-h);
+  font-weight: 600;
+  padding: 0.6rem 0;
+}
