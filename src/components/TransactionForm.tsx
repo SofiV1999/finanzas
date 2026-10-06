@@ -38,11 +38,21 @@ function saveLastAccount(id: string) {
   }
 }
 
+// Valores sugeridos para un movimiento nuevo (p. ej. pagar una factura fija)
+export type TransactionPreset = {
+  type?: TransactionType
+  categoryId?: string
+  amount?: number
+  description?: string
+}
+
 export default function TransactionForm({
   initial,
+  preset,
   onClose,
 }: {
   initial?: Transaction
+  preset?: TransactionPreset
   onClose: () => void
 }) {
   const { accounts, categories, refresh } = useData()
@@ -54,18 +64,20 @@ export default function TransactionForm({
   const defaultAccount =
     usable.find((a) => a.id === readLastAccount()) ?? usable.find((a) => !isDebt(a.type)) ?? usable[0]
 
-  const [type, setType] = useState<TransactionType>(initial?.type ?? 'gasto')
+  const [type, setType] = useState<TransactionType>(initial?.type ?? preset?.type ?? 'gasto')
   const [date, setDate] = useState(initial?.date ?? todayIso())
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
+  const [amount, setAmount] = useState(
+    initial ? String(initial.amount) : preset?.amount ? String(preset.amount) : '',
+  )
   const [accountId, setAccountId] = useState(initial?.account_id ?? defaultAccount?.id ?? '')
-  const [categoryId, setCategoryId] = useState(initial?.category_id ?? '')
+  const [categoryId, setCategoryId] = useState(initial?.category_id ?? preset?.categoryId ?? '')
   const [toAccountId, setToAccountId] = useState(initial?.to_account_id ?? '')
   const [toAmount, setToAmount] = useState(initial?.to_amount ? String(initial.to_amount) : '')
   const [fxRate, setFxRate] = useState(initial?.fx_rate ? String(initial.fx_rate) : '')
   // Si la TRM se escribió a mano, no se reemplaza al cambiar la fecha
   const [fxManual, setFxManual] = useState(Boolean(initial?.fx_rate))
   const [trmDate, setTrmDate] = useState<string | null>(null)
-  const [description, setDescription] = useState(initial?.description ?? '')
+  const [description, setDescription] = useState(initial?.description ?? preset?.description ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 

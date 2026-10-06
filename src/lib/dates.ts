@@ -27,3 +27,10 @@ export function monthEnd(month: string) {
   const [y, m] = month.split('-').map(Number)
   return new Date(y, m, 0).toLocaleDateString('en-CA')
 }
+
+// "2026-10" + 1 -> "2026-11"
+export function addMonths(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}

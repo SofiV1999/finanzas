@@ -103,3 +103,11 @@ export type Transaction = {
   fx_rate: number | null
   description: string | null
 }
+
+// Ajuste del presupuesto de una categoría para un mes (sobre la plantilla default_budget)
+export type Budget = {
+  id: string
+  month: string
+  category_id: string
+  amount: number
+}

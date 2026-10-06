@@ -9,6 +9,7 @@ import Configuracion from './pages/Configuracion'
 import Deudas from './pages/Deudas'
 import Login from './pages/Login'
 import Movimientos from './pages/Movimientos'
+import Presupuesto from './pages/Presupuesto'
 import SectionPage from './pages/SectionPage'
 import SetupNeeded from './pages/SetupNeeded'
 import { sections } from './sections'
@@ -16,6 +17,7 @@ import { sections } from './sections'
 // Secciones ya construidas; el resto muestra lo que vendrá
 const pages: Record<string, ReactElement> = {
   '/movimientos': <Movimientos />,
+  '/presupuesto': <Presupuesto />,
   '/deudas': <Deudas />,
   '/ahorros': <Ahorros />,
   '/configuracion': <Configuracion />,

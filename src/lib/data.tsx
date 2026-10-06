@@ -84,3 +84,11 @@ export function toCop(amount: number, currency: Currency, rate: number | null | 
   if (currency === 'COP') return amount
   return rate ? amount * rate : 0
 }
+
+// Ingreso mensual planeado en pesos: salario × TRM de planeación si es en USD
+// eslint-disable-next-line react-refresh/only-export-components
+export function plannedIncomeCop(settings: Settings | null) {
+  if (!settings) return 0
+  if (settings.salary_currency === 'COP') return settings.monthly_salary
+  return settings.monthly_salary * (settings.planning_fx_rate ?? 0)
+}

@@ -671,8 +671,212 @@ select.inline-input {
   }
 
   .stat {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: baseline;
+    padding: 0.7rem 1rem;
   }
+
+  .stat strong {
+    font-size: 1.15rem;
+  }
+}
+
+/* ---------- Presupuesto ---------- */
+
+.month-nav {
+  margin: 0.25rem 0 1rem;
+}
+
+.month-nav .btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 1.1rem;
+}
+
+.month-title {
+  color: var(--text-h);
+  font-size: 1.1rem;
+  min-width: 10rem;
+  text-align: center;
+}
+
+.month-title::first-letter {
+  text-transform: uppercase;
+}
+
+.fifty {
+  margin-top: 1rem;
+}
+
+.fifty-row {
+  margin-top: 1rem;
+}
+
+.fifty-head,
+.budget-head,
+.budget-foot,
+.income-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.fifty-head strong {
+  color: var(--text-h);
+}
+
+.fifty-bar {
+  position: relative;
+  height: 10px;
+  background: var(--surface-2);
+  border-radius: 5px;
+  margin: 0.4rem 0 0.3rem;
+}
+
+.fifty-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent);
+}
+
+.fifty-fill.bad {
+  background: var(--expense);
+}
+
+.fifty-target {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--text-h);
+}
+
+.budget-toolbar {
+  margin-top: 1.5rem;
+}
+
+.budget-toolbar h2 {
+  margin: 0;
+}
+
+.segmented-inline {
+  grid-template-columns: repeat(2, auto);
+  margin: 0;
+}
+
+.segmented-inline .segment {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.budget-card {
+  margin-top: 1rem;
+}
+
+.budget-card h3 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.budget-subtitle {
+  margin-top: 1.5rem;
+}
+
+.budget-row {
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.budget-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.budget-name strong {
+  color: var(--text-h);
+}
+
+.budget-input {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.amount-input {
+  width: 9rem;
+  text-align: right;
+  border-color: var(--border);
+  background: var(--surface-2);
+}
+
+.budget-meter {
+  width: 100%;
+  margin: 0.45rem 0 0.25rem;
+}
+
+.meter-fill.over {
+  background: var(--expense);
+}
+
+.tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 0;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.tag-necesidad {
+  color: #93c5fd;
+  background: rgba(147, 197, 253, 0.12);
+}
+
+.tag-deseo {
+  color: #f0abfc;
+  background: rgba(240, 171, 252, 0.12);
+}
+
+.tag-ahorro {
+  color: var(--income);
+  background: var(--accent-bg);
+}
+
+.tag-paid {
+  color: var(--income);
+  background: var(--accent-bg);
+}
+
+.tag-pending {
+  color: var(--warning);
+  background: rgba(251, 191, 36, 0.12);
+  cursor: pointer;
+}
+
+.income-row {
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 800px) {
+  .amount-input {
+    width: 7.5rem;
+  }
+
+  .month-title {
+    min-width: 0;
+  }
+}
+
+.budget-head {
+  flex-wrap: nowrap;
+}
+
+.budget-name {
+  flex: 1;
 }
