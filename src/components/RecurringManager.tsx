@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useData } from '../lib/data'
-import { formatDay, todayIso } from '../lib/dates'
+import { formatDay, todayIso, yesterdayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
 import {
   nextDate,
@@ -38,9 +38,7 @@ export default function RecurringManager() {
 
   // Al reanudar se saltan las fechas que pasaron durante la pausa (no se registran de golpe)
   async function resume(rule: RecurringTransaction) {
-    const d = new Date()
-    d.setDate(d.getDate() - 1)
-    const yesterday = d.toLocaleDateString('en-CA')
+    const yesterday = yesterdayIso()
     const lastDone = rule.last_done && rule.last_done > yesterday ? rule.last_done : yesterday
     await update(rule.id, { active: true, last_done: lastDone })
   }

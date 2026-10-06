@@ -34,3 +34,9 @@ export function addMonths(month: string, delta: number) {
   const d = new Date(y, m - 1 + delta, 1)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+
+export function yesterdayIso() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return d.toLocaleDateString('en-CA')
+}
