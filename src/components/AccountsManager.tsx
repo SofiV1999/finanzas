@@ -147,7 +147,9 @@ function AccountForm({
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? 'COP')
   // Las deudas se escriben en positivo y se guardan en negativo
   const [opening, setOpening] = useState(
-    initial ? String(isDebt(initial.type) ? -initial.opening_balance : initial.opening_balance) : '',
+    initial
+      ? String(isDebt(initial.type) ? -initial.opening_balance : initial.opening_balance)
+      : '',
   )
   const [openingDate, setOpeningDate] = useState(initial?.opening_date ?? todayIso())
   const [rate, setRate] = useState(
@@ -182,7 +184,7 @@ function AccountForm({
       statement_day: card ? numOrNull(statementDay) : null,
       due_day: debt ? numOrNull(dueDay) : null,
       original_amount: loan ? numOrNull(originalAmount) : null,
-      min_payment: loan ? numOrNull(minPayment) : null,
+      min_payment: debt ? numOrNull(minPayment) : null,
       term_months: loan ? numOrNull(termMonths) : null,
       archived,
       sort_order: initial?.sort_order ?? Math.max(0, ...accounts.map((a) => a.sort_order)) + 1,
@@ -193,7 +195,9 @@ function AccountForm({
       : await supabase.from('accounts').insert(row)
     setSaving(false)
     if (error) {
-      return setError(error.code === '23505' ? 'Ya tienes una cuenta con ese nombre.' : error.message)
+      return setError(
+        error.code === '23505' ? 'Ya tienes una cuenta con ese nombre.' : error.message,
+      )
     }
     await refresh()
     onClose()
@@ -213,7 +217,11 @@ function AccountForm({
     onClose()
   }
 
-  const title = initial ? `Editar ${initial.name}` : mode === 'deudas' ? 'Nueva deuda' : 'Nueva cuenta'
+  const title = initial
+    ? `Editar ${initial.name}`
+    : mode === 'deudas'
+      ? 'Nueva deuda'
+      : 'Nueva cuenta'
 
   return (
     <Modal title={title} onClose={onClose}>
@@ -232,7 +240,11 @@ function AccountForm({
         <div className="grid-2">
           <div className="field">
             <label htmlFor="acc-type">Tipo</label>
-            <select id="acc-type" value={type} onChange={(e) => setType(e.target.value as AccountType)}>
+            <select
+              id="acc-type"
+              value={type}
+              onChange={(e) => setType(e.target.value as AccountType)}
+            >
               {types.map((t) => (
                 <option key={t} value={t}>
                   {accountTypeLabels[t]}
@@ -264,7 +276,11 @@ function AccountForm({
               onChange={(e) => setOpening(e.target.value)}
             />
             <small className="muted">
-              {opening ? formatMoney(Number(opening), currency) : debt ? 'Lo que debías ese día' : 'Lo que tenías ese día'}
+              {opening
+                ? formatMoney(Number(opening), currency)
+                : debt
+                  ? 'Lo que debías ese día'
+                  : 'Lo que tenías ese día'}
             </small>
           </div>
           <div className="field">
@@ -281,7 +297,9 @@ function AccountForm({
 
         <div className="grid-2">
           <div className="field">
-            <label htmlFor="acc-rate">{debt ? 'Tasa de interés (% E.A.)' : 'Rendimiento (% E.A.)'}</label>
+            <label htmlFor="acc-rate">
+              {debt ? 'Tasa de interés (% E.A.)' : 'Rendimiento (% E.A.)'}
+            </label>
             <input
               id="acc-rate"
               type="number"
@@ -314,7 +332,7 @@ function AccountForm({
         </div>
 
         {card && (
-          <div className="grid-2">
+          <div className="grid-3">
             <div className="field">
               <label htmlFor="acc-limit">Cupo total</label>
               <input
@@ -335,6 +353,18 @@ function AccountForm({
                 max="31"
                 value={statementDay}
                 onChange={(e) => setStatementDay(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="acc-card-min">Pago mensual</label>
+              <input
+                id="acc-card-min"
+                type="number"
+                min="0"
+                step="any"
+                placeholder="Mínimo o lo usual"
+                value={minPayment}
+                onChange={(e) => setMinPayment(e.target.value)}
               />
             </div>
           </div>
@@ -379,7 +409,11 @@ function AccountForm({
 
         {initial && (
           <label className="muted small check-line">
-            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />{' '}
+            <input
+              type="checkbox"
+              checked={archived}
+              onChange={(e) => setArchived(e.target.checked)}
+            />{' '}
             Archivada (cuenta cerrada o deuda pagada: se oculta pero conserva su historial)
           </label>
         )}

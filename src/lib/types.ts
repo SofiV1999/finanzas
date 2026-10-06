@@ -124,3 +124,15 @@ export function sortByGroup(categories: Category[]) {
       a.name.localeCompare(b.name),
   )
 }
+
+export type Goal = {
+  id: string
+  name: string
+  target_amount: number
+  currency: Currency
+  target_date: string | null
+  // El avance de la meta es el saldo de esta cuenta
+  account_id: string | null
+  expected_return_ea: number
+  archived: boolean
+}

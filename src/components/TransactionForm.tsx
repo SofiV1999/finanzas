@@ -3,6 +3,7 @@ import { useData } from '../lib/data'
 import { todayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
+import { monthlyRate } from '../lib/finance'
 import { fetchTrmForDate } from '../lib/trm'
 import {
   accountTypeLabels,
@@ -81,6 +82,9 @@ export default function TransactionForm({
   const [fxManual, setFxManual] = useState(Boolean(initial?.fx_rate))
   const [trmDate, setTrmDate] = useState<string | null>(null)
   const [description, setDescription] = useState(initial?.description ?? preset?.description ?? '')
+  // Pago de préstamo: parte de la cuota que es interés y seguro (se registran como gasto)
+  const [interestText, setInterestText] = useState<string | null>(null)
+  const [insuranceText, setInsuranceText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -90,6 +94,17 @@ export default function TransactionForm({
   const crossCurrency =
     isTransfer && account && toAccount && account.currency !== toAccount.currency
   const needsFx = account?.currency === 'USD' || (isTransfer && toAccount?.currency === 'USD')
+
+  // Al pagar un préstamo se separa la cuota en intereses (gasto) y abono a capital (traslado)
+  const loanPayment = !initial && isTransfer && toAccount?.type === 'prestamo' && !crossCurrency
+  const estimatedInterest = toAccount
+    ? Math.round(Math.max(0, -toAccount.balance) * monthlyRate(toAccount.annual_rate))
+    : 0
+  const interest = loanPayment ? Number(interestText ?? estimatedInterest) || 0 : 0
+  const insurance = loanPayment ? Number(insuranceText) || 0 : 0
+  const principal = Number(amount) - interest - insurance
+  const findCategory = (name: string) =>
+    categories.find((c) => c.kind === 'gasto' && c.name === name && !c.archived)
 
   useEffect(() => {
     if (!needsFx || fxManual || !date) return
@@ -115,6 +130,14 @@ export default function TransactionForm({
     if (isTransfer && !toAccount) return setError('Elige la cuenta destino.')
     if (crossCurrency && !(Number(toAmount) > 0)) return setError('Escribe el monto que recibiste.')
     if (needsFx && !(Number(fxRate) > 0)) return setError('Falta la TRM.')
+    if (loanPayment && principal < 0) {
+      return setError('Los intereses y el seguro no pueden ser mayores que la cuota.')
+    }
+    const interestCategory = findCategory('Intereses y comisiones')
+    const insuranceCategory = findCategory('Seguros') ?? interestCategory
+    if (loanPayment && (interest > 0 || insurance > 0) && !interestCategory) {
+      return setError('Crea la categoría de gasto "Intereses y comisiones" en Configuración.')
+    }
 
     const row = {
       date,
@@ -128,10 +151,28 @@ export default function TransactionForm({
       description: description.trim() || null,
     }
 
+    // Intereses y seguro del préstamo: gastos cargados al préstamo (aumentan la deuda, y el
+    // traslado de la cuota completa la reduce), así el saldo baja solo por el abono a capital
+    const loanCharges = (
+      [
+        [interest, interestCategory, 'Intereses'],
+        [insurance, insuranceCategory, 'Seguro'],
+      ] as const
+    )
+      .filter(([value, category]) => loanPayment && value > 0 && category)
+      .map(([value, category, label]) => ({
+        date,
+        type: 'gasto' as const,
+        account_id: toAccountId,
+        amount: value,
+        category_id: category!.id,
+        description: `${label} ${toAccount?.name ?? ''}`.trim(),
+      }))
+
     setSaving(true)
     const { error } = initial
       ? await supabase.from('transactions').update(row).eq('id', initial.id)
-      : await supabase.from('transactions').insert(row)
+      : await supabase.from('transactions').insert([row, ...loanCharges])
     setSaving(false)
     if (error) return setError(error.message)
 
@@ -256,6 +297,64 @@ export default function TransactionForm({
               fromUsd={account?.currency === 'USD'}
               trm={Number(fxRate)}
             />
+          </div>
+        )}
+
+        {loanPayment && toAccount && (
+          <div className="loan-split">
+            <div className="grid-2">
+              <div className="field">
+                <label htmlFor="tx-interest">Intereses de esta cuota</label>
+                <input
+                  id="tx-interest"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={interestText ?? String(estimatedInterest)}
+                  onChange={(e) => setInterestText(e.target.value)}
+                />
+                <small className="muted">
+                  {interestText === null ? (
+                    toAccount.annual_rate ? (
+                      `Estimado: saldo × ${(monthlyRate(toAccount.annual_rate) * 100).toFixed(2)}% mensual. Corrígelo con el extracto.`
+                    ) : (
+                      'Agrega la tasa E.A. del préstamo para estimarlo.'
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      className="link-btn small"
+                      onClick={() => setInterestText(null)}
+                    >
+                      Usar el estimado ({formatMoney(estimatedInterest)})
+                    </button>
+                  )}
+                </small>
+              </div>
+              <div className="field">
+                <label htmlFor="tx-insurance">Seguro u otros cargos</label>
+                <input
+                  id="tx-insurance"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={insuranceText}
+                  onChange={(e) => setInsuranceText(e.target.value)}
+                />
+                <small className="muted">Si la cuota incluye seguro de vida deudor</small>
+              </div>
+            </div>
+            {Number(amount) > 0 && (
+              <p className="small loan-summary">
+                Abono a capital:{' '}
+                <strong className={principal < 0 ? 'text-expense' : 'text-income'}>
+                  {formatMoney(principal)}
+                </strong>
+                {interest + insurance > 0 &&
+                  ` · Gasto en intereses${insurance > 0 ? ' y seguro' : ''}: ${formatMoney(interest + insurance)}`}
+              </p>
+            )}
           </div>
         )}
 
