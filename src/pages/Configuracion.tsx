@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { MONTH_NAMES, isInUseError } from '../lib/budget'
 import { useData } from '../lib/data'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
@@ -241,6 +242,21 @@ function CategoriesCard({
     onChange()
   }
 
+  async function remove(c: Category) {
+    if (!confirm(`¿Eliminar la categoría "${c.name}"?`)) return
+    const { error } = await supabase.from('categories').delete().eq('id', c.id)
+    if (error) {
+      setError(
+        isInUseError(error.code)
+          ? `"${c.name}" tiene movimientos registrados: archívala en vez de eliminarla.`
+          : error.message,
+      )
+      return
+    }
+    setError(null)
+    onChange()
+  }
+
   async function add(e: FormEvent) {
     e.preventDefault()
     const name = newName.trim()
@@ -284,6 +300,7 @@ function CategoriesCard({
               <th>Nombre</th>
               {kind === 'gasto' && <th>Grupo 50/30/20</th>}
               {kind === 'gasto' && <th>Gasto fijo</th>}
+              {kind === 'gasto' && <th>Frecuencia</th>}
               <th />
             </tr>
           </thead>
@@ -330,12 +347,39 @@ function CategoriesCard({
                     />
                   </td>
                 )}
-                <td className="right">
+                {kind === 'gasto' && (
+                  <td>
+                    <select
+                      className="inline-input"
+                      value={c.frequency === 'anual' ? String(c.due_month) : 'mensual'}
+                      aria-label="Frecuencia"
+                      onChange={(e) =>
+                        update(
+                          c.id,
+                          e.target.value === 'mensual'
+                            ? { frequency: 'mensual', due_month: null }
+                            : { frequency: 'anual', due_month: Number(e.target.value) },
+                        )
+                      }
+                    >
+                      <option value="mensual">Mensual</option>
+                      {MONTH_NAMES.map((name, i) => (
+                        <option key={name} value={i + 1}>
+                          Anual · {name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                )}
+                <td className="right actions-cell">
                   <button
                     className="link-btn"
                     onClick={() => update(c.id, { archived: !c.archived })}
                   >
                     {c.archived ? 'Restaurar' : 'Archivar'}
+                  </button>
+                  <button className="link-btn danger" onClick={() => remove(c)}>
+                    Eliminar
                   </button>
                 </td>
               </tr>
@@ -356,7 +400,10 @@ function CategoriesCard({
       </form>
       {error && <p className="error">{error}</p>}
       <p className="muted small">
-        Archivar oculta la categoría para nuevos movimientos, sin borrar su historial.
+        Archivar oculta la categoría para nuevos movimientos, sin borrar su historial. Eliminar solo
+        funciona si la categoría no tiene movimientos.
+        {kind === 'gasto' &&
+          ' Anual: el presupuesto es el costo del año y se cobra en ese mes; cada mes se aparta 1/12.'}
       </p>
     </div>
   )

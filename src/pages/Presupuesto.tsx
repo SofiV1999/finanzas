@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import TransactionForm, { type TransactionPreset } from '../components/TransactionForm'
+import { MONTH_NAMES, annualProvision, effectiveBudget } from '../lib/budget'
 import { plannedIncomeCop, toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
@@ -74,7 +75,7 @@ export default function Presupuesto() {
   }, [movements, currencyOf, latestTrm])
 
   const overrideByCategory = new Map(budgets.map((b) => [b.category_id, b.amount]))
-  const budgetFor = (c: Category) => overrideByCategory.get(c.id) ?? c.default_budget
+  const budgetFor = (c: Category) => effectiveBudget(c, month, overrideByCategory.get(c.id))
 
   const expenseCats = categories.filter(
     (c) => c.kind === 'gasto' && (!c.archived || realByCategory.has(c.id)),
@@ -94,7 +95,12 @@ export default function Presupuesto() {
   const autoBase: IncomeBase =
     month < currentMonthIso() || (realIncome > 0 && realIncome >= planned) ? 'real' : 'planeado'
   const base = baseChoice ?? autoBase
-  const totalBudget = expenseCats.reduce((s, c) => s + budgetFor(c), 0)
+  // Comprometido cada mes: gastos mensuales + 1/12 de los anuales (la provisión), sin importar
+  // en qué mes se cobra cada anual
+  const provision = annualProvision(categories)
+  const totalBudget =
+    expenseCats.filter((c) => c.frequency !== 'anual').reduce((s, c) => s + budgetFor(c), 0) +
+    provision
   const totalReal = expenseCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0)
 
   async function saveBudget(c: Category, value: number) {
@@ -121,7 +127,16 @@ export default function Presupuesto() {
     await refresh()
   }
 
+  // Lo que falta por pagar (útil cuando la categoría se paga en varias partes)
+  const payPreset = (c: Category) =>
+    setPreset({
+      type: 'gasto',
+      categoryId: c.id,
+      amount: Math.max(0, budgetFor(c) - (realByCategory.get(c.id) ?? 0)) || undefined,
+    })
+
   const rowProps = {
+    month,
     mode,
     realByCategory,
     overrideByCategory,
@@ -173,6 +188,11 @@ export default function Presupuesto() {
         <div className="card stat">
           <span className="muted small">Presupuestado en gastos</span>
           <strong>{formatMoney(totalBudget)}</strong>
+          {provision > 0 && (
+            <span className="muted small">
+              Incluye {formatMoney(provision)} de provisión para gastos anuales
+            </span>
+          )}
           <span className={`small ${planned - totalBudget < 0 ? 'text-expense' : 'muted'}`}>
             {planned - totalBudget >= 0
               ? `${formatMoney(planned - totalBudget)} sin asignar (va a ahorro)`
@@ -256,23 +276,11 @@ export default function Presupuesto() {
       <div className="card budget-card">
         <h3>Gastos fijos</h3>
         {fixed.map((c) => (
-          <BudgetRow
-            key={c.id}
-            category={c}
-            {...rowProps}
-            onPay={() =>
-              setPreset({
-                type: 'gasto',
-                categoryId: c.id,
-                // Lo que falta por pagar (útil cuando la categoría se paga en varias partes)
-                amount: Math.max(0, budgetFor(c) - (realByCategory.get(c.id) ?? 0)) || undefined,
-              })
-            }
-          />
+          <BudgetRow key={c.id} category={c} {...rowProps} onPay={() => payPreset(c)} />
         ))}
         <h3 className="budget-subtitle">Gastos variables</h3>
         {variable.map((c) => (
-          <BudgetRow key={c.id} category={c} {...rowProps} />
+          <BudgetRow key={c.id} category={c} {...rowProps} onPay={() => payPreset(c)} />
         ))}
       </div>
 
@@ -359,6 +367,7 @@ function IncomeRow({
 
 function BudgetRow({
   category: c,
+  month,
   mode,
   realByCategory,
   overrideByCategory,
@@ -368,6 +377,7 @@ function BudgetRow({
   onPay,
 }: {
   category: Category
+  month: string
   mode: EditMode
   realByCategory: Map<string, number>
   overrideByCategory: Map<string, number>
@@ -378,8 +388,10 @@ function BudgetRow({
 }) {
   const real = realByCategory.get(c.id) ?? 0
   const value = mode === 'plantilla' ? c.default_budget : budgetFor(c)
-  const hasOverride =
-    overrideByCategory.has(c.id) && overrideByCategory.get(c.id) !== c.default_budget
+  const template = effectiveBudget(c, month)
+  const hasOverride = overrideByCategory.has(c.id) && overrideByCategory.get(c.id) !== template
+  const annual = c.frequency === 'anual'
+  const dueName = annual && c.due_month ? MONTH_NAMES[c.due_month - 1] : ''
   const ratio = value > 0 ? real / value : real > 0 ? 1.01 : 0
   const remaining = value - real
 
@@ -391,7 +403,8 @@ function BudgetRow({
           <span className={`tag tag-${c.budget_group}`}>
             {budgetGroupLabels[c.budget_group as BudgetGroup]}
           </span>
-          {c.is_fixed &&
+          {annual && <span className="tag">Anual · {dueName}</span>}
+          {(c.is_fixed || (annual && value > 0 && mode === 'mes')) &&
             (real > 0 && real >= value ? (
               <span className="tag tag-paid">Pagado</span>
             ) : real > 0 ? (
@@ -408,7 +421,7 @@ function BudgetRow({
           {mode === 'mes' && hasOverride && (
             <button
               className="link-btn small"
-              title={`Volver a la plantilla (${formatMoney(c.default_budget)})`}
+              title={`Volver a la plantilla (${formatMoney(template)})`}
               onClick={() => onReset(c)}
             >
               ↺
@@ -425,7 +438,18 @@ function BudgetRow({
       </div>
       <div className="budget-foot muted small">
         <span>Gastado {formatMoney(real)}</span>
-        {value > 0 && (
+        {annual && mode === 'plantilla' && (
+          <span>
+            Costo anual · se cobra en {dueName} · aparta {formatMoney(c.default_budget / 12)}/mes
+          </span>
+        )}
+        {annual && mode === 'mes' && value === 0 && (
+          <span>
+            Se cobra en {dueName} ({formatMoney(c.default_budget)}) · aparta{' '}
+            {formatMoney(c.default_budget / 12)}/mes
+          </span>
+        )}
+        {value > 0 && !(annual && mode === 'plantilla') && (
           <span className={remaining < 0 ? 'text-expense' : undefined}>
             {remaining >= 0
               ? `Quedan ${formatMoney(remaining)}`

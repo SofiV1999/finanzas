@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { annualProvision, monthlyEquivalent } from '../lib/budget'
 import { plannedIncomeCop, useData } from '../lib/data'
 import { formatMonth, todayIso } from '../lib/dates'
 import {
@@ -47,14 +48,17 @@ export default function GoalsManager() {
   }
 
   // Sugerencia de fondo de emergencia: 6 meses de gastos presupuestados (o del ingreso)
-  const monthlyExpenses = categories
-    .filter((c) => c.kind === 'gasto' && !c.archived)
-    .reduce((s, c) => s + c.default_budget, 0)
+  const monthlyExpenses = monthlyEquivalent(categories)
   const emergencyTarget = 6 * (monthlyExpenses || plannedIncomeCop(settings))
+  // Sugerencia de bolsillo para gastos anuales: lo que cuestan en un año
+  const annualTotal = annualProvision(categories) * 12
 
   const visible = goals.filter((g) => !g.archived)
   const suggestions = [
     { name: 'Fondo de emergencia', target_amount: Math.round(emergencyTarget) || undefined },
+    ...(annualTotal > 0
+      ? [{ name: 'Gastos anuales', target_amount: Math.round(annualTotal), target_date: undefined }]
+      : []),
     { name: 'Reserva para impuestos' },
     { name: 'Inversión' },
   ].filter((s) => !goals.some((g) => g.name === s.name))

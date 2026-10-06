@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { toCop, useData } from '../lib/data'
 import { todayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
+import { isInUseError } from '../lib/budget'
 import { supabase } from '../lib/supabase'
 import {
   accountTypeLabels,
@@ -225,7 +226,7 @@ function AccountForm({
     const { error } = await supabase.from('accounts').delete().eq('id', initial.id)
     if (error) {
       return setError(
-        error.code === '23503'
+        isInUseError(error.code)
           ? 'Esta cuenta tiene movimientos. Archívala en vez de eliminarla.'
           : error.message,
       )

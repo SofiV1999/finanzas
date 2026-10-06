@@ -24,6 +24,9 @@ export type Category = {
   budget_group: BudgetGroup | null
   is_fixed: boolean
   default_budget: number
+  // 'anual': default_budget es el costo anual y se paga en due_month (1-12)
+  frequency: 'mensual' | 'anual'
+  due_month: number | null
   sort_order: number
   archived: boolean
 }

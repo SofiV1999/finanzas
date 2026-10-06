@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Lines } from '../components/charts'
 import { SERIES } from '../lib/chartColors'
 import TransactionForm, { type TransactionPreset } from '../components/TransactionForm'
+import { effectiveBudget } from '../lib/budget'
 import { toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatDay, formatMonth, todayIso } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
@@ -65,7 +66,7 @@ export default function Resumen() {
   const budgetRows = sortByGroup(categories.filter((c) => c.kind === 'gasto' && !c.archived))
     .map((c) => ({
       category: c,
-      budget: override.get(c.id) ?? c.default_budget,
+      budget: effectiveBudget(c, month, override.get(c.id)),
       real: realByCategory.get(c.id) ?? 0,
     }))
     .filter((r) => r.budget > 0 || r.real > 0)
@@ -89,7 +90,7 @@ export default function Resumen() {
     .filter((c) => c.kind === 'ingreso' && !c.archived && c.name.trim().toLowerCase() !== 'salario')
     .map((c) => ({
       category: c,
-      expected: override.get(c.id) ?? c.default_budget,
+      expected: effectiveBudget(c, month, override.get(c.id)),
       real: realIncomeByCategory.get(c.id) ?? 0,
     }))
     .filter((r) => r.expected > 0 && r.real < r.expected)

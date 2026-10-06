@@ -1216,3 +1216,7 @@ select.inline-input {
 .static-amount {
   padding: 0.35rem 0.5rem;
 }
+
+.actions-cell {
+  white-space: nowrap;
+}
