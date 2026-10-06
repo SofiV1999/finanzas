@@ -1321,3 +1321,71 @@ select.inline-input {
   cursor: pointer;
   color: var(--accent);
 }
+
+/* ---------- Programados ---------- */
+
+.repeat-box {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.repeat-toggle {
+  margin-bottom: 0.5rem;
+}
+
+.repeat-mode {
+  display: inline-grid;
+  margin-bottom: 0.6rem;
+}
+
+.repeat-end {
+  max-width: 14rem;
+  margin-bottom: 0.4rem;
+}
+
+.recurring-card {
+  margin-top: 1rem;
+}
+
+.recurring-toggle {
+  width: 100%;
+  background: none;
+  border: 0;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.recurring-toggle h2 {
+  margin: 0;
+}
+
+.pending-block {
+  margin-bottom: 1rem;
+}
+
+.pending-block .mini-title {
+  margin-top: 0;
+}
+
+.pending-actions {
+  margin: 0;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+.recurring-list {
+  margin-top: 0.75rem;
+}
+
+.recurring-actions {
+  margin-top: 0.25rem;
+  gap: 1rem;
+}
+
+.recurring-list .archived {
+  opacity: 0.55;
+}

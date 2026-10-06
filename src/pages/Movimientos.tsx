@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import RecurringManager from '../components/RecurringManager'
 import TransactionForm from '../components/TransactionForm'
 import { toCop, useData } from '../lib/data'
 import { currentMonthIso, formatDay, formatMonth, monthEnd } from '../lib/dates'
@@ -56,8 +57,9 @@ export default function Movimientos() {
   const term = search.trim().toLowerCase()
   const filtered = term
     ? rows.filter((t) =>
-        [t.description, categoryById.get(t.category_id ?? '')?.name]
-          .some((text) => text?.toLowerCase().includes(term)),
+        [t.description, categoryById.get(t.category_id ?? '')?.name].some((text) =>
+          text?.toLowerCase().includes(term),
+        ),
       )
     : rows
 
@@ -81,10 +83,16 @@ export default function Movimientos() {
       <h1>🧾 Movimientos</h1>
       <p className="muted">Ingresos, gastos, pagos y traslados.</p>
 
+      <RecurringManager />
+
       <div className="card filters">
         <div className="field">
           <label htmlFor="f-period">Período</label>
-          <select id="f-period" value={period} onChange={(e) => setPeriod(e.target.value as Period)}>
+          <select
+            id="f-period"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as Period)}
+          >
             <option value="mes">Mes</option>
             <option value="año">Año completo</option>
           </select>
@@ -105,7 +113,9 @@ export default function Movimientos() {
               min="2000"
               max="2100"
               value={year}
-              onChange={(e) => e.target.value.length === 4 && setMonth(`${e.target.value}-${month.slice(5)}`)}
+              onChange={(e) =>
+                e.target.value.length === 4 && setMonth(`${e.target.value}-${month.slice(5)}`)
+              }
             />
           )}
         </div>
@@ -124,7 +134,11 @@ export default function Movimientos() {
         </div>
         <div className="field">
           <label htmlFor="f-account">Cuenta</label>
-          <select id="f-account" value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)}>
+          <select
+            id="f-account"
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+          >
             <option value="">Todas</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
@@ -210,6 +224,12 @@ export default function Movimientos() {
                     <div className="tx-main">
                       <strong>
                         {t.type === 'traslado' ? 'Traslado' : (category?.name ?? 'Sin categoría')}
+                        {t.recurring_id && (
+                          <span className="muted small" title="Movimiento programado">
+                            {' '}
+                            🔁
+                          </span>
+                        )}
                       </strong>
                       <span className="muted small">
                         {t.description && `${t.description} · `}

@@ -107,6 +107,8 @@ export type Transaction = {
   // TRM (COP por 1 USD) del día del movimiento
   fx_rate: number | null
   description: string | null
+  // Si lo generó un movimiento programado
+  recurring_id?: string | null
 }
 
 // Ajuste del presupuesto de una categoría para un mes (sobre la plantilla default_budget)

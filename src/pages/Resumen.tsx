@@ -7,12 +7,13 @@ import { effectiveBudget } from '../lib/budget'
 import { toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatDay, formatMonth, todayIso } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
+import { pendingConfirmations, presetFor } from '../lib/recurring'
 import { fetchTransactions, makeCop, monthlyTotals, netWorthByMonth } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import { isDebt, sortByGroup, type Budget, type Goal, type Transaction } from '../lib/types'
 
 export default function Resumen() {
-  const { accounts, categories, settings, latestTrm, version } = useData()
+  const { accounts, categories, settings, latestTrm, recurring, version } = useData()
   const [txs, setTxs] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<Budget[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
@@ -109,6 +110,8 @@ export default function Resumen() {
       return { account: a, date: `${dueMonth}-${day}`, paid: paid && dueThisMonth }
     })
     .sort((x, y) => x.date.localeCompare(y.date))
+
+  const toConfirm = pendingConfirmations(recurring, today)
 
   const recent = [...txs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
   const accountName = new Map(accounts.map((a) => [a.id, a.name]))
@@ -225,9 +228,12 @@ export default function Resumen() {
 
         <div className="card">
           <h2>Pendientes del mes</h2>
-          {dueSoon.length === 0 && pendingBills.length === 0 && pendingIncome.length === 0 && (
-            <p className="muted small">No tienes pagos pendientes registrados.</p>
-          )}
+          {dueSoon.length === 0 &&
+            pendingBills.length === 0 &&
+            pendingIncome.length === 0 &&
+            toConfirm.length === 0 && (
+              <p className="muted small">No tienes pagos pendientes registrados.</p>
+            )}
           {dueSoon.map(({ account: a, date, paid }) => {
             const days = Math.round(
               (new Date(`${date}T00:00`).getTime() - new Date(`${today}T00:00`).getTime()) /
@@ -268,6 +274,33 @@ export default function Resumen() {
                   >
                     {r.real > 0 ? 'Faltan ' : ''}
                     {formatMoney(r.budget - r.real)} · registrar
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+          {toConfirm.length > 0 && (
+            <>
+              <h3 className="mini-title">Programados por confirmar</h3>
+              {toConfirm.map(({ rule, date }) => (
+                <div key={`${rule.id}-${date}`} className="mini-row budget-foot small">
+                  <span className="mini-main">
+                    <strong className="text-h">
+                      {rule.type === 'traslado'
+                        ? (rule.description ?? 'Traslado')
+                        : categoryName.get(rule.category_id ?? '')}
+                    </strong>
+                    <span className="muted"> · {formatDay(date)}</span>
+                  </span>
+                  <button
+                    className="tag tag-pending"
+                    onClick={() => setPreset(presetFor(rule, date))}
+                  >
+                    {formatMoney(
+                      rule.amount,
+                      accounts.find((a) => a.id === rule.account_id)?.currency,
+                    )}{' '}
+                    · registrar
                   </button>
                 </div>
               ))}

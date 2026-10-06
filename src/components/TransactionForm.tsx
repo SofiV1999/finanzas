@@ -46,17 +46,35 @@ export type TransactionPreset = {
   categoryId?: string
   amount?: number
   description?: string
+  accountId?: string
+  toAccountId?: string
+  toAmount?: number
+  date?: string
+  // Al confirmar un movimiento programado: de cuál y de qué fecha
+  recurring?: { id: string; date: string }
 }
 
-export default function TransactionForm({
-  initial,
-  preset,
-  onClose,
-}: {
+type FormProps = {
   initial?: Transaction
   preset?: TransactionPreset
   onClose: () => void
-}) {
+}
+
+// "Duplicar" cambia el formulario de edición por uno nuevo con los mismos datos
+export default function TransactionForm(props: FormProps) {
+  const [duplicate, setDuplicate] = useState<TransactionPreset | null>(null)
+  if (duplicate) {
+    return <TransactionFormInner key="duplicado" preset={duplicate} onClose={props.onClose} />
+  }
+  return <TransactionFormInner {...props} onDuplicate={setDuplicate} />
+}
+
+function TransactionFormInner({
+  initial,
+  preset,
+  onClose,
+  onDuplicate,
+}: FormProps & { onDuplicate?: (preset: TransactionPreset) => void }) {
   const { accounts, categories, refresh } = useData()
 
   // Cuentas activas, más la del movimiento que se edita aunque esté archivada
@@ -69,14 +87,24 @@ export default function TransactionForm({
     usable[0]
 
   const [type, setType] = useState<TransactionType>(initial?.type ?? preset?.type ?? 'gasto')
-  const [date, setDate] = useState(initial?.date ?? todayIso())
+  const [date, setDate] = useState(initial?.date ?? preset?.date ?? todayIso())
   const [amount, setAmount] = useState(
     initial ? String(initial.amount) : preset?.amount ? String(preset.amount) : '',
   )
-  const [accountId, setAccountId] = useState(initial?.account_id ?? defaultAccount?.id ?? '')
+  const [accountId, setAccountId] = useState(
+    initial?.account_id ?? preset?.accountId ?? defaultAccount?.id ?? '',
+  )
   const [categoryId, setCategoryId] = useState(initial?.category_id ?? preset?.categoryId ?? '')
-  const [toAccountId, setToAccountId] = useState(initial?.to_account_id ?? '')
-  const [toAmount, setToAmount] = useState(initial?.to_amount ? String(initial.to_amount) : '')
+  const [toAccountId, setToAccountId] = useState(
+    initial?.to_account_id ?? preset?.toAccountId ?? '',
+  )
+  const [toAmount, setToAmount] = useState(
+    initial?.to_amount
+      ? String(initial.to_amount)
+      : preset?.toAmount
+        ? String(preset.toAmount)
+        : '',
+  )
   const [fxRate, setFxRate] = useState(initial?.fx_rate ? String(initial.fx_rate) : '')
   // Si la TRM se escribió a mano, no se reemplaza al cambiar la fecha
   const [fxManual, setFxManual] = useState(Boolean(initial?.fx_rate))
@@ -87,6 +115,10 @@ export default function TransactionForm({
   const [insuranceText, setInsuranceText] = useState('')
   // Cuota mensual (incluye intereses) o abono extra (todo va a capital)
   const [loanKind, setLoanKind] = useState<'cuota' | 'abono'>('cuota')
+  // Repetir cada mes (crea un movimiento programado)
+  const [repeat, setRepeat] = useState(false)
+  const [repeatAuto, setRepeatAuto] = useState(true)
+  const [repeatEnd, setRepeatEnd] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -175,11 +207,61 @@ export default function TransactionForm({
       }))
 
     setSaving(true)
+    const today = todayIso()
+    let link: { recurring_id: string; recurring_date: string } | null = preset?.recurring
+      ? { recurring_id: preset.recurring.id, recurring_date: preset.recurring.date }
+      : null
+
+    // Nuevo programado: se crea la regla; si la fecha ya llegó, este movimiento es el primero
+    if (!initial && repeat) {
+      if (repeatEnd && repeatEnd < date) {
+        setSaving(false)
+        return setError('La fecha final debe ser después de la fecha del movimiento.')
+      }
+      const { data: rule, error: ruleError } = await supabase
+        .from('recurring_transactions')
+        .insert({
+          type,
+          account_id: account.id,
+          amount: Number(amount),
+          category_id: row.category_id,
+          to_account_id: row.to_account_id,
+          to_amount: row.to_amount,
+          description: row.description,
+          day_of_month: Number(date.slice(8, 10)),
+          start_date: date,
+          end_date: repeatEnd || null,
+          auto: repeatAuto,
+          last_done: date <= today ? date : null,
+        })
+        .select('id')
+        .single()
+      if (ruleError) {
+        setSaving(false)
+        return setError(ruleError.message)
+      }
+      if (date > today) {
+        setSaving(false)
+        saveLastAccount(account.id)
+        await refresh()
+        return onClose()
+      }
+      link = { recurring_id: rule.id, recurring_date: date }
+    }
+
     const { error } = initial
       ? await supabase.from('transactions').update(row).eq('id', initial.id)
-      : await supabase.from('transactions').insert([row, ...loanCharges])
+      : await supabase.from('transactions').insert([{ ...row, ...link }, ...loanCharges])
     setSaving(false)
     if (error) return setError(error.message)
+
+    // Al confirmar un pendiente, el programado avanza hasta esa fecha
+    if (preset?.recurring) {
+      await supabase
+        .from('recurring_transactions')
+        .update({ last_done: preset.recurring.date })
+        .eq('id', preset.recurring.id)
+    }
 
     saveLastAccount(account.id)
     await refresh()
@@ -203,7 +285,16 @@ export default function TransactionForm({
   }
 
   return (
-    <Modal title={initial ? 'Editar movimiento' : 'Registrar movimiento'} onClose={onClose}>
+    <Modal
+      title={
+        initial
+          ? 'Editar movimiento'
+          : preset?.recurring
+            ? 'Confirmar movimiento programado'
+            : 'Registrar movimiento'
+      }
+      onClose={onClose}
+    >
       <form onSubmit={handleSubmit}>
         <div className="segmented" role="tablist">
           {(Object.keys(typeLabels) as TransactionType[]).map((t) => (
@@ -439,12 +530,93 @@ export default function TransactionForm({
           />
         </div>
 
+        {!initial && !preset?.recurring && (
+          <div className="repeat-box">
+            <label className="check-line repeat-toggle">
+              <input
+                type="checkbox"
+                checked={repeat}
+                onChange={(e) => setRepeat(e.target.checked)}
+              />{' '}
+              <strong>Repetir cada mes</strong>
+              {repeat && date && (
+                <span className="muted"> · el día {Number(date.slice(8, 10))} de cada mes</span>
+              )}
+            </label>
+            {repeat && (
+              <>
+                <div className="segmented segmented-inline repeat-mode" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={repeatAuto}
+                    className={`segment${repeatAuto ? ' active' : ''}`}
+                    onClick={() => setRepeatAuto(true)}
+                  >
+                    Registrar automáticamente
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!repeatAuto}
+                    className={`segment${!repeatAuto ? ' active' : ''}`}
+                    onClick={() => setRepeatAuto(false)}
+                  >
+                    Pedirme confirmación
+                  </button>
+                </div>
+                <div className="field repeat-end">
+                  <label htmlFor="tx-repeat-end">Hasta (opcional)</label>
+                  <input
+                    id="tx-repeat-end"
+                    type="date"
+                    value={repeatEnd}
+                    min={date}
+                    onChange={(e) => setRepeatEnd(e.target.value)}
+                  />
+                </div>
+                <small className="muted">
+                  {repeatAuto
+                    ? 'Se registra solo en su fecha (al abrir la app), con el mismo monto.'
+                    : 'En su fecha aparece como pendiente para que confirmes o ajustes el monto.'}
+                  {date > todayIso() &&
+                    (repeatAuto
+                      ? ' Como la fecha es futura, el primero se registrará ese día.'
+                      : ' Como la fecha es futura, el primero aparecerá como pendiente ese día.')}
+                  {loanPayment &&
+                    repeatAuto &&
+                    ' Para cuotas de préstamo te recomiendo “Pedirme confirmación”: así cada mes se separan los intereses.'}
+                </small>
+              </>
+            )}
+          </div>
+        )}
+
         {error && <p className="error">{error}</p>}
 
         <div className="row">
           {initial && (
             <button type="button" className="link-btn danger" onClick={handleDelete}>
               Eliminar
+            </button>
+          )}
+          {initial && onDuplicate && (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() =>
+                onDuplicate({
+                  type: initial.type,
+                  accountId: initial.account_id,
+                  toAccountId: initial.to_account_id ?? undefined,
+                  toAmount: initial.to_amount ?? undefined,
+                  categoryId: initial.category_id ?? undefined,
+                  amount: initial.amount,
+                  description: initial.description ?? undefined,
+                })
+              }
+            >
+              Duplicar
             </button>
           )}
           <span className="spacer" />
