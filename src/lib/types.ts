@@ -33,3 +33,73 @@ export const budgetGroupLabels: Record<BudgetGroup, string> = {
   deseo: 'Deseo',
   ahorro: 'Ahorro',
 }
+
+export type AccountType =
+  | 'efectivo'
+  | 'ahorros'
+  | 'corriente'
+  | 'cdt'
+  | 'inversion'
+  | 'cripto'
+  | 'tarjeta_credito'
+  | 'prestamo'
+  | 'otro'
+
+export const accountTypeLabels: Record<AccountType, string> = {
+  efectivo: 'Efectivo',
+  ahorros: 'Cuenta de ahorros',
+  corriente: 'Cuenta corriente / billetera',
+  cdt: 'CDT',
+  inversion: 'Inversión / fondo',
+  cripto: 'Cripto',
+  otro: 'Otro',
+  tarjeta_credito: 'Tarjeta de crédito',
+  prestamo: 'Préstamo',
+}
+
+export const debtTypes: AccountType[] = ['tarjeta_credito', 'prestamo']
+export const assetTypes = (Object.keys(accountTypeLabels) as AccountType[]).filter(
+  (t) => !debtTypes.includes(t),
+)
+
+export const isDebt = (type: AccountType) => debtTypes.includes(type)
+
+export type Account = {
+  id: string
+  name: string
+  type: AccountType
+  currency: Currency
+  // Negativo para deudas
+  opening_balance: number
+  opening_date: string
+  // Tasa efectiva anual (0.28 = 28% E.A.)
+  annual_rate: number | null
+  credit_limit: number | null
+  statement_day: number | null
+  due_day: number | null
+  original_amount: number | null
+  min_payment: number | null
+  term_months: number | null
+  archived: boolean
+  sort_order: number
+}
+
+// Cuenta con su saldo actual (vista account_balances)
+export type AccountWithBalance = Account & { balance: number }
+
+export type TransactionType = 'ingreso' | 'gasto' | 'traslado'
+
+export type Transaction = {
+  id: string
+  date: string
+  type: TransactionType
+  account_id: string
+  amount: number
+  category_id: string | null
+  to_account_id: string | null
+  // Monto recibido en traslados entre monedas distintas
+  to_amount: number | null
+  // TRM (COP por 1 USD) del día del movimiento
+  fx_rate: number | null
+  description: string | null
+}

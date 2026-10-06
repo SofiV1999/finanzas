@@ -120,7 +120,7 @@ select {
 
 .layout {
   display: grid;
-  grid-template-columns: 230px 1fr;
+  grid-template-columns: 230px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -202,7 +202,7 @@ select {
 
 @media (max-width: 800px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
@@ -210,7 +210,7 @@ select {
   }
 
   .content {
-    padding: 1.25rem 1rem 6rem;
+    padding: 1.25rem 1rem 10rem;
   }
 
   .mobile-nav {
@@ -221,16 +221,16 @@ select {
     right: 0;
     background: var(--surface);
     border-top: 1px solid var(--border);
-    overflow-x: auto;
     z-index: 10;
   }
 
   .mobile-nav .nav-link {
-    flex: 1 0 auto;
+    flex: 1 1 0;
+    min-width: 0;
     flex-direction: column;
     gap: 0.1rem;
-    font-size: 0.7rem;
-    padding: 0.5rem 0.6rem;
+    font-size: 0.68rem;
+    padding: 0.5rem 0.1rem;
     border-radius: 0;
   }
 
@@ -396,4 +396,283 @@ select.inline-input {
   color: var(--text-h);
   font-weight: 600;
   padding: 0.6rem 0;
+}
+
+.text-income {
+  color: var(--income);
+}
+
+.text-expense {
+  color: var(--expense);
+}
+
+.link-btn.danger {
+  color: var(--expense);
+}
+
+.grid-2,
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0 1rem;
+}
+
+.grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.check-line {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+/* ---------- Modal ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 50;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.modal-header {
+  margin: 0 0 1rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.close-btn {
+  font-size: 1.1rem;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 1rem;
+}
+
+.segment {
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  padding: 0.5rem;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.segment.active {
+  background: var(--surface);
+  color: var(--text-h);
+}
+
+.segment-gasto.active {
+  color: var(--expense);
+}
+
+.segment-ingreso.active {
+  color: var(--income);
+}
+
+/* ---------- Cuentas ---------- */
+
+.total-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 1.05rem;
+}
+
+.total-line strong {
+  font-size: 1.4rem;
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.account-row,
+.tx-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border);
+  color: inherit;
+  text-align: left;
+  padding: 0.75rem 0.25rem;
+  cursor: pointer;
+}
+
+.account-row:hover,
+.tx-row:hover {
+  background: var(--surface-2);
+}
+
+.account-row.archived {
+  opacity: 0.5;
+}
+
+.account-main,
+.tx-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.account-main strong,
+.tx-main strong {
+  color: var(--text-h);
+}
+
+.account-amount,
+.tx-amount {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.meter {
+  height: 6px;
+  width: 160px;
+  max-width: 100%;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+
+.meter-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.meter-fill.warn {
+  background: var(--warning);
+}
+
+/* ---------- Movimientos ---------- */
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0 0.75rem;
+  margin-top: 1.25rem;
+  padding-bottom: 0.4rem;
+}
+
+.filters .field {
+  margin-bottom: 0.5rem;
+}
+
+.field input,
+.field select {
+  min-width: 0;
+  width: 100%;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  padding: 0.9rem 1rem;
+}
+
+.stat strong {
+  font-size: 1.3rem;
+  color: var(--text-h);
+}
+
+.stat strong.text-income {
+  color: var(--income);
+}
+
+.stat strong.text-expense {
+  color: var(--expense);
+}
+
+.tx-list {
+  padding: 0.5rem 1rem;
+}
+
+.tx-day {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 0.9rem 0.25rem 0.35rem;
+}
+
+.tx-main .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tx-gasto {
+  color: var(--expense);
+}
+
+.tx-ingreso {
+  color: var(--income);
+}
+
+.tx-traslado {
+  color: var(--text-h);
+}
+
+.empty {
+  text-align: center;
+}
+
+@media (max-width: 1000px) {
+  .filters {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .filters,
+  .grid-3 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .stat {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+  }
 }

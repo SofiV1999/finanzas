@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import { sections } from '../sections'
+import TransactionForm from './TransactionForm'
 
-function NavLinks() {
+function NavLinks({ compact = false }: { compact?: boolean }) {
   return sections.map((s) => (
     <NavLink
       key={s.path}
@@ -12,13 +14,14 @@ function NavLinks() {
       className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
     >
       <span className="nav-icon">{s.icon}</span>
-      {s.label}
+      {compact ? s.short : s.label}
     </NavLink>
   ))
 }
 
 export default function Layout() {
   const { session } = useAuth()
+  const [registering, setRegistering] = useState(false)
 
   return (
     <div className="layout">
@@ -38,12 +41,13 @@ export default function Layout() {
       </main>
 
       <nav className="mobile-nav">
-        <NavLinks />
+        <NavLinks compact />
       </nav>
 
-      <button className="btn fab" title="Registrar movimiento" disabled>
+      <button className="btn fab" title="Registrar movimiento" onClick={() => setRegistering(true)}>
         + Registrar
       </button>
+      {registering && <TransactionForm onClose={() => setRegistering(false)} />}
     </div>
   )
 }

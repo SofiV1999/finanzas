@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useData } from '../lib/data'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { fetchLatestTrm, type Trm } from '../lib/trm'
@@ -12,26 +13,7 @@ import {
 } from '../lib/types'
 
 export default function Configuracion() {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    const [s, c] = await Promise.all([
-      supabase.from('settings').select('*').maybeSingle(),
-      supabase.from('categories').select('*').order('sort_order').order('name'),
-    ])
-    if (s.error || c.error) {
-      setError((s.error ?? c.error)!.message)
-      return
-    }
-    setSettings(s.data)
-    setCategories(c.data)
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
+  const { settings, categories, error, refresh } = useData()
 
   return (
     <>
@@ -39,18 +21,18 @@ export default function Configuracion() {
       <p className="muted">Salario, metas 50/30/20 y categorías.</p>
       {error && <p className="error">No se pudieron cargar los datos: {error}</p>}
       <div className="stack">
-        {settings && <SettingsCard settings={settings} onSaved={setSettings} />}
+        {settings && <SettingsCard settings={settings} onSaved={refresh} />}
         <CategoriesCard
           title="Categorías de gastos"
           kind="gasto"
           categories={categories.filter((c) => c.kind === 'gasto')}
-          onChange={load}
+          onChange={refresh}
         />
         <CategoriesCard
           title="Categorías de ingresos"
           kind="ingreso"
           categories={categories.filter((c) => c.kind === 'ingreso')}
-          onChange={load}
+          onChange={refresh}
         />
       </div>
     </>
@@ -65,7 +47,7 @@ function SettingsCard({
   onSaved,
 }: {
   settings: Settings
-  onSaved: (s: Settings) => void
+  onSaved: () => void
 }) {
   const [currency, setCurrency] = useState<Currency>(settings.salary_currency)
   const [salary, setSalary] = useState(String(settings.monthly_salary))
@@ -92,7 +74,7 @@ function SettingsCard({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('settings')
       .update({
         monthly_salary: Number(salary),
@@ -104,13 +86,11 @@ function SettingsCard({
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', settings.user_id)
-      .select()
-      .single()
     if (error) {
       setStatus(`Error: ${error.message}`)
       return
     }
-    onSaved(data)
+    onSaved()
     setStatus('Guardado ✓')
   }
 
