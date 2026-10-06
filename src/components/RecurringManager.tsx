@@ -8,6 +8,7 @@ import {
   presetFor,
   type RecurringTransaction,
 } from '../lib/recurring'
+import { transferLabel } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import Modal from './Modal'
 import TransactionForm, { type TransactionPreset } from './TransactionForm'
@@ -25,7 +26,7 @@ export default function RecurringManager() {
   const categoryName = new Map(categories.map((c) => [c.id, c.name]))
   const label = (r: RecurringTransaction) =>
     r.type === 'traslado'
-      ? `Traslado${r.description ? ` · ${r.description}` : ''}`
+      ? `${transferLabel(r, accountName)}${r.description ? ` · ${r.description}` : ''}`
       : `${categoryName.get(r.category_id ?? '') ?? 'Sin categoría'}${r.description ? ` · ${r.description}` : ''}`
 
   if (recurring.length === 0) return null

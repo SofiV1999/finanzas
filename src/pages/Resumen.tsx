@@ -8,7 +8,13 @@ import { toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatDay, formatMonth, todayIso } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
 import { pendingConfirmations, presetFor } from '../lib/recurring'
-import { fetchTransactions, makeCop, monthlyTotals, netWorthByMonth } from '../lib/reports'
+import {
+  fetchTransactions,
+  makeCop,
+  monthlyTotals,
+  netWorthByMonth,
+  transferLabel,
+} from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import { isDebt, sortByGroup, type Budget, type Goal, type Transaction } from '../lib/types'
 
@@ -115,6 +121,7 @@ export default function Resumen() {
 
   const recent = [...txs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)
   const accountName = new Map(accounts.map((a) => [a.id, a.name]))
+  const accountById = new Map(accounts.map((a) => [a.id, a]))
   const categoryName = new Map(categories.map((c) => [c.id, c.name]))
 
   function goalProgress(g: Goal) {
@@ -287,7 +294,7 @@ export default function Resumen() {
                   <span className="mini-main">
                     <strong className="text-h">
                       {rule.type === 'traslado'
-                        ? (rule.description ?? 'Traslado')
+                        ? transferLabel(rule, accountById)
                         : categoryName.get(rule.category_id ?? '')}
                     </strong>
                     <span className="muted"> · {formatDay(date)}</span>
@@ -378,7 +385,9 @@ export default function Resumen() {
               <div key={t.id} className="mini-row budget-foot small">
                 <span className="mini-main">
                   <strong className="text-h">
-                    {t.type === 'traslado' ? 'Traslado' : categoryName.get(t.category_id ?? '')}
+                    {t.type === 'traslado'
+                      ? transferLabel(t, accountById)
+                      : categoryName.get(t.category_id ?? '')}
                   </strong>
                   <span className="muted">
                     {' '}

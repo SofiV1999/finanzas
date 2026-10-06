@@ -1,6 +1,6 @@
 import { toCop } from './data'
 import { MONTH_NAMES } from './budget'
-import { fetchTransactions, makeCop } from './reports'
+import { fetchTransactions, makeCop, transferLabel } from './reports'
 import { supabase } from './supabase'
 import {
   accountTypeLabels,
@@ -81,7 +81,7 @@ export async function exportToExcel(
     movements.push([
       date(t.date),
       text(typeLabels[t.type]),
-      text(category?.name),
+      text(t.type === 'traslado' ? transferLabel(t, accountById) : category?.name),
       text(category?.budget_group ? budgetGroupLabels[category.budget_group as BudgetGroup] : ''),
       text(account?.name),
       text(to?.name),

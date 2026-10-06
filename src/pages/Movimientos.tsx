@@ -4,6 +4,7 @@ import TransactionForm from '../components/TransactionForm'
 import { toCop, useData } from '../lib/data'
 import { currentMonthIso, formatDay, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney } from '../lib/format'
+import { cashFlow, transferLabel } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import type { Transaction, TransactionType } from '../lib/types'
 
@@ -68,8 +69,7 @@ export default function Movimientos() {
     const currency = accountById.get(t.account_id)?.currency ?? 'COP'
     return toCop(t.amount, currency, t.fx_rate ?? latestTrm?.rate)
   }
-  const income = filtered.filter((t) => t.type === 'ingreso').reduce((s, t) => s + cop(t), 0)
-  const expenses = filtered.filter((t) => t.type === 'gasto').reduce((s, t) => s + cop(t), 0)
+  const flow = cashFlow(filtered, accountById, latestTrm?.rate)
 
   // Agrupar por día
   const byDay = new Map<string, Transaction[]>()
@@ -182,23 +182,37 @@ export default function Movimientos() {
         </div>
       </div>
 
-      <div className="summary">
+      <div className="summary summary-4">
         <div className="card stat">
           <span className="muted small">Ingresos</span>
-          <strong className="text-income">{formatMoney(income)}</strong>
+          <strong className="text-income">{formatMoney(flow.income)}</strong>
         </div>
         <div className="card stat">
           <span className="muted small">Gastos</span>
-          <strong className="text-expense">{formatMoney(expenses)}</strong>
+          <strong className="text-expense">{formatMoney(flow.expenses)}</strong>
+          {flow.expensesOnCredit > 0 && (
+            <span className="muted small">
+              {formatMoney(flow.expensesOnCredit)} con tarjeta o préstamo
+            </span>
+          )}
         </div>
         <div className="card stat">
-          <span className="muted small">Balance</span>
-          <strong>{formatMoney(income - expenses)}</strong>
+          <span className="muted small">Pagos a deudas</span>
+          <strong>{formatMoney(flow.debtPayments)}</strong>
+        </div>
+        <div className="card stat">
+          <span className="muted small">Flujo de caja</span>
+          <strong className={flow.net < 0 ? 'text-expense' : 'text-income'}>
+            {formatMoney(flow.net)}
+          </strong>
+          <span className="muted small">Lo que entró menos lo que salió de tus cuentas</span>
         </div>
       </div>
       <p className="muted small">
         {period === 'mes' ? formatMonth(month) : `Año ${year}`} · {filtered.length} movimientos ·
-        montos en USD convertidos con la TRM del día del movimiento. Los traslados no suman.
+        montos en USD con la TRM del día del movimiento. Flujo de caja = ingresos − gastos pagados
+        con tus cuentas − pagos a deudas (las compras con tarjeta salen de caja cuando pagas la
+        tarjeta, así no se cuentan dos veces). Los traslados entre tus cuentas no cuentan.
       </p>
 
       {error && <p className="error">{error}</p>}
@@ -223,7 +237,9 @@ export default function Movimientos() {
                   <button key={t.id} className="tx-row" onClick={() => setEditing(t)}>
                     <div className="tx-main">
                       <strong>
-                        {t.type === 'traslado' ? 'Traslado' : (category?.name ?? 'Sin categoría')}
+                        {t.type === 'traslado'
+                          ? transferLabel(t, accountById)
+                          : (category?.name ?? 'Sin categoría')}
                         {t.recurring_id && (
                           <span className="muted small" title="Movimiento programado">
                             {' '}

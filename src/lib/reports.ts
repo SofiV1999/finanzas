@@ -1,6 +1,12 @@
 import { toCop } from './data'
 import { supabase } from './supabase'
-import type { AccountWithBalance, Category, Currency, Transaction } from './types'
+import {
+  isDebt,
+  type AccountWithBalance,
+  type Category,
+  type Currency,
+  type Transaction,
+} from './types'
 
 const PAGE = 1000
 
@@ -183,4 +189,61 @@ export function compactCop(value: number) {
     return `${sign}${(abs / 1e6).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`
   if (abs >= 1e3) return `${sign}${Math.round(abs / 1e3).toLocaleString('es-CO')} mil`
   return `${sign}${Math.round(abs)}`
+}
+
+// Nombre legible de un traslado según sus cuentas
+export function transferLabel(
+  t: Pick<Transaction, 'type' | 'account_id' | 'to_account_id'>,
+  accountById: Map<string, AccountWithBalance>,
+) {
+  const from = accountById.get(t.account_id)
+  const to = t.to_account_id ? accountById.get(t.to_account_id) : undefined
+  if (!to) return 'Traslado'
+  if (isDebt(to.type)) return `Pago a ${to.name}`
+  if (from && from.currency !== to.currency) return `Cambio ${from.currency} → ${to.currency}`
+  return 'Traslado'
+}
+
+export type CashFlow = {
+  income: number
+  expenses: number
+  // Gastos cargados a tarjetas o préstamos (aún no salen de tus cuentas)
+  expensesOnCredit: number
+  debtPayments: number
+  // Variación real del dinero en tus cuentas (no deudas)
+  net: number
+}
+
+// Resumen de flujo de caja de un conjunto de movimientos, en pesos
+export function cashFlow(
+  txs: Transaction[],
+  accountById: Map<string, AccountWithBalance>,
+  usdRate: number | undefined,
+): CashFlow {
+  const cop = (amount: number, accountId: string | null, fx: number | null) => {
+    const currency = accountById.get(accountId ?? '')?.currency ?? 'COP'
+    return toCop(amount, currency, fx ?? usdRate)
+  }
+  const isAsset = (id: string | null) => {
+    const a = accountById.get(id ?? '')
+    return a !== undefined && !isDebt(a.type)
+  }
+  const flow: CashFlow = { income: 0, expenses: 0, expensesOnCredit: 0, debtPayments: 0, net: 0 }
+  for (const t of txs) {
+    const out = cop(t.amount, t.account_id, t.fx_rate)
+    if (t.type === 'ingreso') {
+      flow.income += out
+      if (isAsset(t.account_id)) flow.net += out
+    } else if (t.type === 'gasto') {
+      flow.expenses += out
+      if (isAsset(t.account_id)) flow.net -= out
+      else flow.expensesOnCredit += out
+    } else {
+      const received = cop(t.to_amount ?? t.amount, t.to_account_id, t.fx_rate)
+      if (isAsset(t.account_id)) flow.net -= out
+      if (isAsset(t.to_account_id)) flow.net += received
+      else if (isAsset(t.account_id)) flow.debtPayments += out
+    }
+  }
+  return flow
 }
