@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
+import { useOnline } from '../lib/install'
 import { supabase } from '../lib/supabase'
 import { sections } from '../sections'
 import TransactionForm from './TransactionForm'
@@ -22,6 +23,7 @@ function NavLinks({ compact = false }: { compact?: boolean }) {
 export default function Layout() {
   const { session } = useAuth()
   const [registering, setRegistering] = useState(false)
+  const online = useOnline()
 
   return (
     <div className="layout">
@@ -37,6 +39,11 @@ export default function Layout() {
       </aside>
 
       <main className="content">
+        {!online && (
+          <div className="offline-banner">
+            Sin conexión: tus datos no se pueden cargar ni guardar hasta que vuelva internet.
+          </div>
+        )}
         <Outlet />
       </main>
 

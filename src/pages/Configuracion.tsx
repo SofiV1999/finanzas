@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { MONTH_NAMES, isInUseError } from '../lib/budget'
 import { useData } from '../lib/data'
+import { isIOS, isStandalone, useInstallPrompt } from '../lib/install'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { fetchLatestTrm, type Trm } from '../lib/trm'
@@ -23,6 +24,7 @@ export default function Configuracion() {
       <p className="muted">Salario, metas 50/30/20 y categorías.</p>
       {error && <p className="error">No se pudieron cargar los datos: {error}</p>}
       <div className="stack">
+        <InstallCard />
         {settings && <SettingsCard settings={settings} onSaved={refresh} />}
         <CategoriesCard
           title="Categorías de gastos"
@@ -43,6 +45,53 @@ export default function Configuracion() {
 
 // 0.3 -> "30" (evita 30.000000000000004)
 const toPctInput = (v: number) => String(Math.round(v * 10000) / 100)
+
+function InstallCard() {
+  const { canPrompt, install } = useInstallPrompt()
+  if (isStandalone()) {
+    return (
+      <div className="card install-card">
+        <h2>📱 App en tu celular</h2>
+        <p className="muted small">Estás usando la app instalada ✓</p>
+      </div>
+    )
+  }
+  return (
+    <div className="card install-card">
+      <h2>📱 Instalar en tu celular</h2>
+      <p className="muted small">
+        Queda en la pantalla de inicio con su ícono, abre a pantalla completa y carga más rápido.
+      </p>
+      {canPrompt ? (
+        <button className="btn" onClick={install}>
+          Instalar app
+        </button>
+      ) : isIOS() ? (
+        <ol className="small install-steps">
+          <li>
+            Abre esta página en <strong>Safari</strong>.
+          </li>
+          <li>
+            Toca <strong>Compartir</strong> (el cuadro con la flecha hacia arriba).
+          </li>
+          <li>
+            Elige <strong>Agregar a inicio</strong> y luego <strong>Agregar</strong>.
+          </li>
+        </ol>
+      ) : (
+        <ol className="small install-steps">
+          <li>
+            En <strong>Chrome</strong> (Android), abre el menú <strong>⋮</strong>.
+          </li>
+          <li>
+            Elige <strong>Instalar app</strong> o <strong>Agregar a la pantalla principal</strong>.
+          </li>
+          <li>En el computador, usa el ícono de instalar en la barra de direcciones.</li>
+        </ol>
+      )}
+    </div>
+  )
+}
 
 function SettingsCard({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
   const [currency, setCurrency] = useState<Currency>(settings.salary_currency)

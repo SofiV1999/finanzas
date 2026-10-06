@@ -1257,3 +1257,51 @@ select.inline-input {
 .tag {
   white-space: nowrap;
 }
+
+/* ---------- App instalada ---------- */
+
+.install-steps {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.7;
+}
+
+.offline-banner {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warning);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+/* Márgenes seguros del iPhone (muesca y barra de inicio) cuando abre a pantalla completa */
+@media (max-width: 800px) {
+  .content {
+    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .fab {
+    bottom: calc(5rem + env(safe-area-inset-bottom));
+  }
+}
+
+.center-screen {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Evita el zoom automático del iPhone al tocar un campo (pasa con letra < 16px) */
+@media (max-width: 800px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
