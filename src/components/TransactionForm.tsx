@@ -85,6 +85,8 @@ export default function TransactionForm({
   // Pago de préstamo: parte de la cuota que es interés y seguro (se registran como gasto)
   const [interestText, setInterestText] = useState<string | null>(null)
   const [insuranceText, setInsuranceText] = useState('')
+  // Cuota mensual (incluye intereses) o abono extra (todo va a capital)
+  const [loanKind, setLoanKind] = useState<'cuota' | 'abono'>('cuota')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -100,8 +102,9 @@ export default function TransactionForm({
   const estimatedInterest = toAccount
     ? Math.round(Math.max(0, -toAccount.balance) * monthlyRate(toAccount.annual_rate))
     : 0
-  const interest = loanPayment ? Number(interestText ?? estimatedInterest) || 0 : 0
-  const insurance = loanPayment ? Number(insuranceText) || 0 : 0
+  const isInstallment = loanPayment && loanKind === 'cuota'
+  const interest = isInstallment ? Number(interestText ?? estimatedInterest) || 0 : 0
+  const insurance = isInstallment ? Number(insuranceText) || 0 : 0
   const principal = Number(amount) - interest - insurance
   const findCategory = (name: string) =>
     categories.find((c) => c.kind === 'gasto' && c.name === name && !c.archived)
@@ -148,7 +151,9 @@ export default function TransactionForm({
       to_account_id: isTransfer ? toAccountId : null,
       to_amount: crossCurrency ? Number(toAmount) : null,
       fx_rate: needsFx ? Number(fxRate) : null,
-      description: description.trim() || null,
+      description:
+        description.trim() ||
+        (loanPayment && loanKind === 'abono' ? 'Abono extra a capital' : null),
     }
 
     // Intereses y seguro del préstamo: gastos cargados al préstamo (aumentan la deuda, y el
@@ -302,49 +307,78 @@ export default function TransactionForm({
 
         {loanPayment && toAccount && (
           <div className="loan-split">
-            <div className="grid-2">
-              <div className="field">
-                <label htmlFor="tx-interest">Intereses de esta cuota</label>
-                <input
-                  id="tx-interest"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={interestText ?? String(estimatedInterest)}
-                  onChange={(e) => setInterestText(e.target.value)}
-                />
-                <small className="muted">
-                  {interestText === null ? (
-                    toAccount.annual_rate ? (
-                      `Estimado: saldo × ${(monthlyRate(toAccount.annual_rate) * 100).toFixed(2)}% mensual. Corrígelo con el extracto.`
-                    ) : (
-                      'Agrega la tasa E.A. del préstamo para estimarlo.'
-                    )
-                  ) : (
-                    <button
-                      type="button"
-                      className="link-btn small"
-                      onClick={() => setInterestText(null)}
-                    >
-                      Usar el estimado ({formatMoney(estimatedInterest)})
-                    </button>
-                  )}
-                </small>
-              </div>
-              <div className="field">
-                <label htmlFor="tx-insurance">Seguro u otros cargos</label>
-                <input
-                  id="tx-insurance"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder="0"
-                  value={insuranceText}
-                  onChange={(e) => setInsuranceText(e.target.value)}
-                />
-                <small className="muted">Si la cuota incluye seguro de vida deudor</small>
-              </div>
+            <div className="segmented segmented-inline loan-kind" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={loanKind === 'cuota'}
+                className={`segment${loanKind === 'cuota' ? ' active' : ''}`}
+                onClick={() => setLoanKind('cuota')}
+              >
+                Cuota mensual
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={loanKind === 'abono'}
+                className={`segment${loanKind === 'abono' ? ' active' : ''}`}
+                onClick={() => setLoanKind('abono')}
+              >
+                Abono extra a capital
+              </button>
             </div>
+            {loanKind === 'cuota' && (
+              <div className="grid-2">
+                <div className="field">
+                  <label htmlFor="tx-interest">Intereses de esta cuota</label>
+                  <input
+                    id="tx-interest"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={interestText ?? String(estimatedInterest)}
+                    onChange={(e) => setInterestText(e.target.value)}
+                  />
+                  <small className="muted">
+                    {interestText === null ? (
+                      toAccount.annual_rate ? (
+                        `Estimado: saldo × ${(monthlyRate(toAccount.annual_rate) * 100).toFixed(2)}% mensual. Corrígelo con el extracto.`
+                      ) : (
+                        'Agrega la tasa E.A. del préstamo para estimarlo.'
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        className="link-btn small"
+                        onClick={() => setInterestText(null)}
+                      >
+                        Usar el estimado ({formatMoney(estimatedInterest)})
+                      </button>
+                    )}
+                  </small>
+                </div>
+                <div className="field">
+                  <label htmlFor="tx-insurance">Seguro u otros cargos</label>
+                  <input
+                    id="tx-insurance"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0"
+                    value={insuranceText}
+                    onChange={(e) => setInsuranceText(e.target.value)}
+                  />
+                  <small className="muted">Si la cuota incluye seguro de vida deudor</small>
+                </div>
+              </div>
+            )}
+            {loanKind === 'abono' && (
+              <p className="small muted loan-summary">
+                Todo el monto reduce el capital, sin intereses. Pregúntale al banco si el abono
+                reduce el plazo o la cuota; si reduce la cuota, actualiza la cuota mensual del
+                préstamo en Deudas.
+              </p>
+            )}
             {Number(amount) > 0 && (
               <p className="small loan-summary">
                 Abono a capital:{' '}

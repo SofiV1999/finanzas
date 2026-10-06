@@ -1220,3 +1220,13 @@ select.inline-input {
 .actions-cell {
   white-space: nowrap;
 }
+
+.loan-kind {
+  display: inline-grid;
+  margin-bottom: 0.75rem;
+  background: var(--surface);
+}
+
+.loan-kind .segment.active {
+  background: var(--surface-2);
+}
