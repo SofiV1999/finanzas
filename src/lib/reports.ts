@@ -207,43 +207,41 @@ export function transferLabel(
 export type CashFlow = {
   income: number
   expenses: number
-  // Gastos cargados a tarjetas o préstamos (aún no salen de tus cuentas)
-  expensesOnCredit: number
-  debtPayments: number
-  // Variación real del dinero en tus cuentas (no deudas)
+  // Gastos pagados con tarjeta de crédito (restan del balance al comprar)
+  expensesOnCards: number
+  // Lo que se pagó a préstamos (cuotas y abonos)
+  loanPayments: number
+  // Ingresos − gastos − pagos a préstamos. Los pagos a tarjetas no restan (sus compras ya se
+  // restaron como gasto) y los intereses/seguros cargados a un préstamo tampoco (ya van dentro
+  // de la cuota pagada)
   net: number
 }
 
-// Resumen de flujo de caja de un conjunto de movimientos, en pesos
+// Totales de un conjunto de movimientos, en pesos
 export function cashFlow(
   txs: Transaction[],
   accountById: Map<string, AccountWithBalance>,
   usdRate: number | undefined,
 ): CashFlow {
-  const cop = (amount: number, accountId: string | null, fx: number | null) => {
-    const currency = accountById.get(accountId ?? '')?.currency ?? 'COP'
-    return toCop(amount, currency, fx ?? usdRate)
+  const cop = (t: Transaction) => {
+    const currency = accountById.get(t.account_id)?.currency ?? 'COP'
+    return toCop(t.amount, currency, t.fx_rate ?? usdRate)
   }
-  const isAsset = (id: string | null) => {
-    const a = accountById.get(id ?? '')
-    return a !== undefined && !isDebt(a.type)
-  }
-  const flow: CashFlow = { income: 0, expenses: 0, expensesOnCredit: 0, debtPayments: 0, net: 0 }
+  const typeOf = (id: string | null) => accountById.get(id ?? '')?.type
+  const flow: CashFlow = { income: 0, expenses: 0, expensesOnCards: 0, loanPayments: 0, net: 0 }
+  let chargedToLoans = 0
   for (const t of txs) {
-    const out = cop(t.amount, t.account_id, t.fx_rate)
-    if (t.type === 'ingreso') {
-      flow.income += out
-      if (isAsset(t.account_id)) flow.net += out
-    } else if (t.type === 'gasto') {
-      flow.expenses += out
-      if (isAsset(t.account_id)) flow.net -= out
-      else flow.expensesOnCredit += out
-    } else {
-      const received = cop(t.to_amount ?? t.amount, t.to_account_id, t.fx_rate)
-      if (isAsset(t.account_id)) flow.net -= out
-      if (isAsset(t.to_account_id)) flow.net += received
-      else if (isAsset(t.account_id)) flow.debtPayments += out
+    const value = cop(t)
+    if (t.type === 'ingreso') flow.income += value
+    else if (t.type === 'gasto') {
+      flow.expenses += value
+      const accountType = typeOf(t.account_id)
+      if (accountType === 'tarjeta_credito') flow.expensesOnCards += value
+      if (accountType === 'prestamo') chargedToLoans += value
+    } else if (typeOf(t.to_account_id) === 'prestamo' && typeOf(t.account_id) !== 'prestamo') {
+      flow.loanPayments += value
     }
   }
+  flow.net = flow.income - (flow.expenses - chargedToLoans) - flow.loanPayments
   return flow
 }

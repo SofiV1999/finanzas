@@ -190,15 +190,15 @@ export default function Movimientos() {
         <div className="card stat">
           <span className="muted small">Gastos</span>
           <strong className="text-expense">{formatMoney(flow.expenses)}</strong>
-          {flow.expensesOnCredit > 0 && (
+          {flow.expensesOnCards > 0 && (
             <span className="muted small">
-              {formatMoney(flow.expensesOnCredit)} con tarjeta o préstamo
+              Incluye {formatMoney(flow.expensesOnCards)} con tarjeta de crédito
             </span>
           )}
         </div>
         <div className="card stat">
-          <span className="muted small">Pagos a deudas</span>
-          <strong>{formatMoney(flow.debtPayments)}</strong>
+          <span className="muted small">Pagos a préstamos</span>
+          <strong>{formatMoney(flow.loanPayments)}</strong>
         </div>
         <div className="card stat">
           <span className="muted small">Balance</span>
@@ -210,8 +210,9 @@ export default function Movimientos() {
       <p className="muted small">
         {period === 'mes' ? formatMonth(month) : `Año ${year}`} · {filtered.length} movimientos ·
         montos en USD con la TRM del día del movimiento. Balance = ingresos − gastos − pagos a
-        deudas (las compras con tarjeta se descuentan al pagar la tarjeta, para no restarlas dos
-        veces). Los traslados entre tus cuentas no cuentan.
+        préstamos. Las compras con tarjeta restan al comprar, así que pagar la tarjeta no vuelve a
+        restar; los intereses de un préstamo ya van dentro de su cuota. Los demás traslados no
+        cuentan.
       </p>
 
       {error && <p className="error">{error}</p>}
