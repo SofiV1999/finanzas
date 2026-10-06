@@ -111,3 +111,16 @@ export type Budget = {
   category_id: string
   amount: number
 }
+
+const budgetGroupOrder: Record<BudgetGroup, number> = { necesidad: 0, deseo: 1, ahorro: 2 }
+
+// Ordena por grupo 50/30/20 (necesidades, deseos, ahorro) y luego por el orden propio
+export function sortByGroup(categories: Category[]) {
+  return [...categories].sort(
+    (a, b) =>
+      (a.budget_group ? budgetGroupOrder[a.budget_group] : 3) -
+        (b.budget_group ? budgetGroupOrder[b.budget_group] : 3) ||
+      a.sort_order - b.sort_order ||
+      a.name.localeCompare(b.name),
+  )
+}

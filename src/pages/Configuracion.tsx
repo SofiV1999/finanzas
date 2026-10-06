@@ -10,6 +10,7 @@ import {
   type CategoryKind,
   type Currency,
   type Settings,
+  sortByGroup,
 } from '../lib/types'
 
 export default function Configuracion() {
@@ -25,7 +26,7 @@ export default function Configuracion() {
         <CategoriesCard
           title="Categorías de gastos"
           kind="gasto"
-          categories={categories.filter((c) => c.kind === 'gasto')}
+          categories={sortByGroup(categories.filter((c) => c.kind === 'gasto'))}
           onChange={refresh}
         />
         <CategoriesCard
@@ -42,13 +43,7 @@ export default function Configuracion() {
 // 0.3 -> "30" (evita 30.000000000000004)
 const toPctInput = (v: number) => String(Math.round(v * 10000) / 100)
 
-function SettingsCard({
-  settings,
-  onSaved,
-}: {
-  settings: Settings
-  onSaved: () => void
-}) {
+function SettingsCard({ settings, onSaved }: { settings: Settings; onSaved: () => void }) {
   const [currency, setCurrency] = useState<Currency>(settings.salary_currency)
   const [salary, setSalary] = useState(String(settings.monthly_salary))
   const [planningRate, setPlanningRate] = useState(String(settings.planning_fx_rate ?? ''))
@@ -159,9 +154,27 @@ function SettingsCard({
         )}
       </div>
       <div className="grid-4">
-        <PctField id="needs" label="Necesidades %" value={needs} onChange={setNeeds} salaryCop={salaryCop} />
-        <PctField id="wants" label="Deseos %" value={wants} onChange={setWants} salaryCop={salaryCop} />
-        <PctField id="savings" label="Ahorro / Inversión %" value={savings} onChange={setSavings} salaryCop={salaryCop} />
+        <PctField
+          id="needs"
+          label="Necesidades %"
+          value={needs}
+          onChange={setNeeds}
+          salaryCop={salaryCop}
+        />
+        <PctField
+          id="wants"
+          label="Deseos %"
+          value={wants}
+          onChange={setWants}
+          salaryCop={salaryCop}
+        />
+        <PctField
+          id="savings"
+          label="Ahorro / Inversión %"
+          value={savings}
+          onChange={setSavings}
+          salaryCop={salaryCop}
+        />
       </div>
       <div className="row">
         <span className={totalOk ? 'muted' : 'error'}>
@@ -295,7 +308,9 @@ function CategoriesCard({
                       className="inline-input"
                       value={c.budget_group ?? 'necesidad'}
                       aria-label="Grupo 50/30/20"
-                      onChange={(e) => update(c.id, { budget_group: e.target.value as BudgetGroup })}
+                      onChange={(e) =>
+                        update(c.id, { budget_group: e.target.value as BudgetGroup })
+                      }
                     >
                       {Object.entries(budgetGroupLabels).map(([value, label]) => (
                         <option key={value} value={value}>

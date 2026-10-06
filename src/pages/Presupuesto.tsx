@@ -4,9 +4,16 @@ import { plannedIncomeCop, toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
 import { supabase } from '../lib/supabase'
-import { budgetGroupLabels, type Budget, type BudgetGroup, type Category } from '../lib/types'
+import {
+  budgetGroupLabels,
+  sortByGroup,
+  type Budget,
+  type BudgetGroup,
+  type Category,
+} from '../lib/types'
 
 type EditMode = 'mes' | 'plantilla'
+type IncomeBase = 'planeado' | 'real'
 
 type Movement = {
   type: 'ingreso' | 'gasto'
@@ -24,6 +31,8 @@ export default function Presupuesto() {
   const [movements, setMovements] = useState<Movement[]>([])
   const [error, setError] = useState<string | null>(null)
   const [preset, setPreset] = useState<TransactionPreset | null>(null)
+  // Base del 50/30/20; null = automática
+  const [baseChoice, setBaseChoice] = useState<IncomeBase | null>(null)
 
   const monthStart = `${month}-01`
 
@@ -71,11 +80,16 @@ export default function Presupuesto() {
     (c) => c.kind === 'gasto' && (!c.archived || realByCategory.has(c.id)),
   )
   const incomeCats = categories.filter((c) => c.kind === 'ingreso')
-  const fixed = expenseCats.filter((c) => c.is_fixed)
-  const variable = expenseCats.filter((c) => !c.is_fixed)
+  const fixed = sortByGroup(expenseCats.filter((c) => c.is_fixed))
+  const variable = sortByGroup(expenseCats.filter((c) => !c.is_fixed))
 
   const planned = plannedIncomeCop(settings)
   const realIncome = incomeCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0)
+  // Mientras el mes está en curso y no ha entrado todo el ingreso, se compara contra lo
+  // planeado; en meses cerrados o cuando el ingreso real ya alcanzó lo planeado, contra lo real.
+  const autoBase: IncomeBase =
+    month < currentMonthIso() || (realIncome > 0 && realIncome >= planned) ? 'real' : 'planeado'
+  const base = baseChoice ?? autoBase
   const totalBudget = expenseCats.reduce((s, c) => s + budgetFor(c), 0)
   const totalReal = expenseCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0)
 
@@ -173,8 +187,10 @@ export default function Presupuesto() {
         expenseCats={expenseCats}
         realByCategory={realByCategory}
         budgetFor={budgetFor}
-        income={realIncome > 0 ? realIncome : planned}
-        incomeIsReal={realIncome > 0}
+        income={base === 'real' ? realIncome : planned}
+        base={base}
+        isAuto={baseChoice === null}
+        onBaseChange={setBaseChoice}
       />
 
       <div className="row budget-toolbar">
@@ -215,7 +231,12 @@ export default function Presupuesto() {
             category={c}
             {...rowProps}
             onPay={() =>
-              setPreset({ type: 'gasto', categoryId: c.id, amount: budgetFor(c) || undefined })
+              setPreset({
+                type: 'gasto',
+                categoryId: c.id,
+                // Lo que falta por pagar (útil cuando la categoría se paga en varias partes)
+                amount: Math.max(0, budgetFor(c) - (realByCategory.get(c.id) ?? 0)) || undefined,
+              })
             }
           />
         ))}
@@ -279,8 +300,12 @@ function BudgetRow({
             {budgetGroupLabels[c.budget_group as BudgetGroup]}
           </span>
           {c.is_fixed &&
-            (real > 0 ? (
+            (real > 0 && real >= value ? (
               <span className="tag tag-paid">Pagado</span>
+            ) : real > 0 ? (
+              <button className="tag tag-pending" onClick={onPay} title="Registrar otro pago">
+                Parcial · faltan {formatMoney(value - real)}
+              </button>
             ) : value > 0 ? (
               <button className="tag tag-pending" onClick={onPay} title="Registrar el pago">
                 Pendiente · registrar pago
@@ -352,13 +377,17 @@ function FiftyThirtyTwenty({
   realByCategory,
   budgetFor,
   income,
-  incomeIsReal,
+  base,
+  isAuto,
+  onBaseChange,
 }: {
   expenseCats: Category[]
   realByCategory: Map<string, number>
   budgetFor: (c: Category) => number
   income: number
-  incomeIsReal: boolean
+  base: IncomeBase
+  isAuto: boolean
+  onBaseChange: (b: IncomeBase | null) => void
 }) {
   const { settings } = useData()
   if (!settings) return null
@@ -400,9 +429,24 @@ function FiftyThirtyTwenty({
       <div className="row">
         <h2>50/30/20 del mes</h2>
         <span className="spacer" />
-        <span className="muted small">
-          % sobre {incomeIsReal ? 'el ingreso real' : 'el ingreso planeado'} ({formatMoney(income)})
-        </span>
+        <label className="muted small" htmlFor="income-base">
+          % sobre
+        </label>
+        <select
+          id="income-base"
+          className="inline-input base-select"
+          value={isAuto ? 'auto' : base}
+          onChange={(e) =>
+            onBaseChange(e.target.value === 'auto' ? null : (e.target.value as IncomeBase))
+          }
+        >
+          <option value="auto">
+            Automático ({base === 'real' ? 'ingreso real' : 'ingreso planeado'})
+          </option>
+          <option value="planeado">Ingreso planeado</option>
+          <option value="real">Ingreso real</option>
+        </select>
+        <strong className="small">{formatMoney(income)}</strong>
       </div>
       {rows.map((r) => {
         const pct = income > 0 ? r.real / income : 0
@@ -434,7 +478,8 @@ function FiftyThirtyTwenty({
       })}
       <p className="muted small">
         El ahorro es lo que queda del ingreso después de necesidades y deseos: incluye lo que pasas
-        a ahorros o inversiones y lo que abonas a capital de tus deudas.
+        a ahorros o inversiones y lo que abonas a capital de tus deudas. En automático se usa el
+        ingreso planeado mientras el mes está en curso y aún no ha entrado todo tu ingreso.
       </p>
     </div>
   )

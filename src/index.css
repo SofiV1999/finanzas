@@ -880,3 +880,9 @@ select.inline-input {
 .budget-name {
   flex: 1;
 }
+
+.base-select {
+  width: auto;
+  border-color: var(--border);
+  font-size: 0.85rem;
+}

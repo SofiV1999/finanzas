@@ -7,6 +7,7 @@ import { fetchTrmForDate } from '../lib/trm'
 import {
   accountTypeLabels,
   isDebt,
+  sortByGroup,
   type AccountWithBalance,
   type Category,
   type Transaction,
@@ -62,7 +63,9 @@ export default function TransactionForm({
     (a) => !a.archived || a.id === initial?.account_id || a.id === initial?.to_account_id,
   )
   const defaultAccount =
-    usable.find((a) => a.id === readLastAccount()) ?? usable.find((a) => !isDebt(a.type)) ?? usable[0]
+    usable.find((a) => a.id === readLastAccount()) ??
+    usable.find((a) => !isDebt(a.type)) ??
+    usable[0]
 
   const [type, setType] = useState<TransactionType>(initial?.type ?? preset?.type ?? 'gasto')
   const [date, setDate] = useState(initial?.date ?? todayIso())
@@ -84,7 +87,8 @@ export default function TransactionForm({
   const account = usable.find((a) => a.id === accountId)
   const toAccount = usable.find((a) => a.id === toAccountId)
   const isTransfer = type === 'traslado'
-  const crossCurrency = isTransfer && account && toAccount && account.currency !== toAccount.currency
+  const crossCurrency =
+    isTransfer && account && toAccount && account.currency !== toAccount.currency
   const needsFx = account?.currency === 'USD' || (isTransfer && toAccount?.currency === 'USD')
 
   useEffect(() => {
@@ -273,7 +277,11 @@ export default function TransactionForm({
               {fxManual ? (
                 <>
                   Escrita a mano.{' '}
-                  <button type="button" className="link-btn small" onClick={() => setFxManual(false)}>
+                  <button
+                    type="button"
+                    className="link-btn small"
+                    onClick={() => setFxManual(false)}
+                  >
                     Usar la TRM oficial
                   </button>
                 </>
@@ -290,7 +298,9 @@ export default function TransactionForm({
           <label htmlFor="tx-description">Descripción (opcional)</label>
           <input
             id="tx-description"
-            placeholder={isTransfer ? 'Ej. pago tarjeta, paso a ahorros' : 'Ej. mercado D1, almuerzo'}
+            placeholder={
+              isTransfer ? 'Ej. pago tarjeta, paso a ahorros' : 'Ej. mercado D1, almuerzo'
+            }
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -358,8 +368,8 @@ function CategorySelect(props: {
   const active = props.categories.filter(
     (c) => c.kind === props.kind && (!c.archived || c.id === props.value),
   )
-  const fixed = active.filter((c) => c.is_fixed)
-  const variable = active.filter((c) => !c.is_fixed)
+  const fixed = sortByGroup(active.filter((c) => c.is_fixed))
+  const variable = sortByGroup(active.filter((c) => !c.is_fixed))
   const option = (c: Category) => (
     <option key={c.id} value={c.id}>
       {c.name}
