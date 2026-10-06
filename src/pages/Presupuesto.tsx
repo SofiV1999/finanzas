@@ -83,7 +83,11 @@ export default function Presupuesto() {
   const fixed = sortByGroup(expenseCats.filter((c) => c.is_fixed))
   const variable = sortByGroup(expenseCats.filter((c) => !c.is_fixed))
 
-  const planned = plannedIncomeCop(settings)
+  // Ingreso planeado = salario (Ajustes) + ingreso esperado de las demás categorías de ingreso
+  const salaryCop = plannedIncomeCop(settings)
+  const otherIncomeCats = incomeCats.filter((c) => !c.archived && !isSalary(c))
+  const otherExpected = otherIncomeCats.reduce((s, c) => s + budgetFor(c), 0)
+  const planned = salaryCop + otherExpected
   const realIncome = incomeCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0)
   // Mientras el mes está en curso y no ha entrado todo el ingreso, se compara contra lo
   // planeado; en meses cerrados o cuando el ingreso real ya alcanzó lo planeado, contra lo real.
@@ -158,12 +162,13 @@ export default function Presupuesto() {
         <div className="card stat">
           <span className="muted small">Ingreso planeado</span>
           <strong>{formatMoney(planned)}</strong>
-          {settings?.salary_currency === 'USD' && (
-            <span className="muted small">
-              {formatMoney(settings.monthly_salary, 'USD')} × TRM{' '}
-              {formatMoney(settings.planning_fx_rate ?? 0)}
-            </span>
-          )}
+          <span className="muted small">
+            Salario{' '}
+            {settings?.salary_currency === 'USD'
+              ? `${formatMoney(settings.monthly_salary, 'USD')} × TRM ${formatMoney(settings.planning_fx_rate ?? 0)}`
+              : formatMoney(salaryCop)}
+            {otherExpected > 0 && ` + otros ${formatMoney(otherExpected)}`}
+          </span>
         </div>
         <div className="card stat">
           <span className="muted small">Presupuestado en gastos</span>
@@ -194,7 +199,7 @@ export default function Presupuesto() {
       />
 
       <div className="row budget-toolbar">
-        <h2>Gastos por categoría</h2>
+        <h2>Por categoría</h2>
         <span className="spacer" />
         <div className="segmented segmented-inline" role="tablist">
           <button
@@ -224,6 +229,31 @@ export default function Presupuesto() {
       </p>
 
       <div className="card budget-card">
+        <h3>Ingresos esperados</h3>
+        {incomeCats
+          .filter((c) => !c.archived || realByCategory.has(c.id))
+          .map((c) => (
+            <IncomeRow
+              key={c.id}
+              category={c}
+              mode={mode}
+              real={realByCategory.get(c.id) ?? 0}
+              expected={
+                isSalary(c) ? salaryCop : mode === 'plantilla' ? c.default_budget : budgetFor(c)
+              }
+              hasOverride={
+                overrideByCategory.has(c.id) && overrideByCategory.get(c.id) !== c.default_budget
+              }
+              onSave={(v) => saveBudget(c, v)}
+              onReset={() => resetBudget(c)}
+              onReceive={(amount) =>
+                setPreset({ type: 'ingreso', categoryId: c.id, amount: amount || undefined })
+              }
+            />
+          ))}
+      </div>
+
+      <div className="card budget-card">
         <h3>Gastos fijos</h3>
         {fixed.map((c) => (
           <BudgetRow
@@ -246,22 +276,84 @@ export default function Presupuesto() {
         ))}
       </div>
 
-      <div className="card budget-card">
-        <h3>Ingresos del mes</h3>
-        {incomeCats
-          .filter((c) => !c.archived || realByCategory.has(c.id))
-          .map((c) => (
-            <div key={c.id} className="income-row">
-              <span>{c.name}</span>
-              <strong className={realByCategory.get(c.id) ? 'text-income' : 'muted'}>
-                {formatMoney(realByCategory.get(c.id) ?? 0)}
-              </strong>
-            </div>
-          ))}
-      </div>
-
       {preset && <TransactionForm preset={preset} onClose={() => setPreset(null)} />}
     </>
+  )
+}
+
+// El salario se configura en Ajustes (con su moneda y TRM de planeación); su categoría solo
+// muestra lo recibido
+const isSalary = (c: Category) => c.name.trim().toLowerCase() === 'salario'
+
+function IncomeRow({
+  category: c,
+  mode,
+  real,
+  expected,
+  hasOverride,
+  onSave,
+  onReset,
+  onReceive,
+}: {
+  category: Category
+  mode: EditMode
+  real: number
+  expected: number
+  hasOverride: boolean
+  onSave: (value: number) => void
+  onReset: () => void
+  onReceive: (amount: number) => void
+}) {
+  const salary = isSalary(c)
+  const ratio = expected > 0 ? Math.min(1, real / expected) : real > 0 ? 1 : 0
+  return (
+    <div className="budget-row">
+      <div className="budget-head">
+        <div className="budget-name">
+          <strong>{c.name}</strong>
+          {!salary &&
+            expected > 0 &&
+            (real >= expected ? (
+              <span className="tag tag-paid">Recibido</span>
+            ) : real > 0 ? (
+              <button className="tag tag-pending" onClick={() => onReceive(expected - real)}>
+                Parcial · faltan {formatMoney(expected - real)}
+              </button>
+            ) : (
+              <button className="tag tag-pending" onClick={() => onReceive(expected)}>
+                Pendiente · registrar
+              </button>
+            ))}
+        </div>
+        <div className="budget-input">
+          {salary ? (
+            <span className="muted small static-amount" title="Se cambia en Ajustes">
+              {formatMoney(expected)}
+            </span>
+          ) : (
+            <>
+              {mode === 'mes' && hasOverride && (
+                <button
+                  className="link-btn small"
+                  title={`Volver a la plantilla (${formatMoney(c.default_budget)})`}
+                  onClick={onReset}
+                >
+                  ↺
+                </button>
+              )}
+              <BudgetInput key={`${mode}-${expected}`} value={expected} onSave={onSave} />
+            </>
+          )}
+        </div>
+      </div>
+      <div className="meter budget-meter">
+        <div className="meter-fill income-fill" style={{ width: `${ratio * 100}%` }} />
+      </div>
+      <div className="budget-foot muted small">
+        <span>Recibido {formatMoney(real)}</span>
+        {salary && <span>Esperado según Ajustes (salario × TRM de planeación)</span>}
+      </div>
+    </div>
   )
 }
 

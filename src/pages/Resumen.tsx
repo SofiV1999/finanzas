@@ -79,6 +79,21 @@ export default function Resumen() {
 
   const pendingBills = budgetRows.filter((r) => r.category.is_fixed && r.real < r.budget)
 
+  // Ingresos esperados (distintos al salario) que aún no llegan este mes
+  const realIncomeByCategory = new Map<string, number>()
+  for (const t of txs) {
+    if (t.type !== 'ingreso' || !t.date.startsWith(month) || !t.category_id) continue
+    realIncomeByCategory.set(t.category_id, (realIncomeByCategory.get(t.category_id) ?? 0) + cop(t))
+  }
+  const pendingIncome = categories
+    .filter((c) => c.kind === 'ingreso' && !c.archived && c.name.trim().toLowerCase() !== 'salario')
+    .map((c) => ({
+      category: c,
+      expected: override.get(c.id) ?? c.default_budget,
+      real: realIncomeByCategory.get(c.id) ?? 0,
+    }))
+    .filter((r) => r.expected > 0 && r.real < r.expected)
+
   // Próximos pagos de tarjetas y préstamos con día de pago
   const dueSoon = accounts
     .filter((a) => isDebt(a.type) && !a.archived && a.due_day && a.balance < -0.5)
@@ -208,8 +223,8 @@ export default function Resumen() {
         </div>
 
         <div className="card">
-          <h2>Próximos pagos</h2>
-          {dueSoon.length === 0 && pendingBills.length === 0 && (
+          <h2>Pendientes del mes</h2>
+          {dueSoon.length === 0 && pendingBills.length === 0 && pendingIncome.length === 0 && (
             <p className="muted small">No tienes pagos pendientes registrados.</p>
           )}
           {dueSoon.map(({ account: a, date, paid }) => {
@@ -252,6 +267,29 @@ export default function Resumen() {
                   >
                     {r.real > 0 ? 'Faltan ' : ''}
                     {formatMoney(r.budget - r.real)} · registrar
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+          {pendingIncome.length > 0 && (
+            <>
+              <h3 className="mini-title">Ingresos por recibir</h3>
+              {pendingIncome.map((r) => (
+                <div key={r.category.id} className="mini-row budget-foot small">
+                  <strong className="text-h">{r.category.name}</strong>
+                  <button
+                    className="tag tag-pending"
+                    onClick={() =>
+                      setPreset({
+                        type: 'ingreso',
+                        categoryId: r.category.id,
+                        amount: r.expected - r.real,
+                      })
+                    }
+                  >
+                    {r.real > 0 ? 'Faltan ' : ''}
+                    {formatMoney(r.expected - r.real)} · registrar
                   </button>
                 </div>
               ))}
