@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ExportButton from '../components/ExportButton'
 import { ChartCard, GroupedColumns, HorizontalBars, Lines } from '../components/charts'
 import { SERIES } from '../lib/chartColors'
 import { useData } from '../lib/data'
@@ -124,6 +125,11 @@ export default function Reportes() {
         >
           ›
         </button>
+        <span className="spacer" />
+        <ExportButton
+          range={{ from: `${year}-01-01`, to: `${year}-12-31`, fileLabel: String(year) }}
+          label={`Exportar ${year} a Excel`}
+        />
       </div>
 
       {error && <p className="error">{error}</p>}

@@ -27,6 +27,8 @@ export type Category = {
   // 'anual': default_budget es el costo anual y se paga en due_month (1-12)
   frequency: 'mensual' | 'anual'
   due_month: number | null
+  // Día de pago (recordatorios del calendario)
+  due_day: number | null
   sort_order: number
   archived: boolean
 }

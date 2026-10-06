@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import ExportButton from '../components/ExportButton'
+import RemindersCard from '../components/RemindersCard'
 import { MONTH_NAMES, isInUseError } from '../lib/budget'
+import { todayIso } from '../lib/dates'
 import { useData } from '../lib/data'
 import { isIOS, isStandalone, useInstallPrompt } from '../lib/install'
 import { formatMoney } from '../lib/format'
@@ -38,6 +41,21 @@ export default function Configuracion() {
           categories={categories.filter((c) => c.kind === 'ingreso')}
           onChange={refresh}
         />
+        <RemindersCard />
+        <div className="card">
+          <h2>📊 Exportar a Excel</h2>
+          <p className="muted small">
+            Descarga todo tu historial: movimientos, resumen por mes, cuentas, presupuesto y metas.
+            Sirve también como copia de seguridad.
+          </p>
+          <div className="row">
+            <ExportButton
+              range={{ fileLabel: `todo-${todayIso()}` }}
+              label="Descargar todo"
+              className="btn"
+            />
+          </div>
+        </div>
       </div>
     </>
   )
@@ -350,6 +368,7 @@ function CategoriesCard({
               {kind === 'gasto' && <th>Grupo 50/30/20</th>}
               {kind === 'gasto' && <th>Gasto fijo</th>}
               {kind === 'gasto' && <th>Frecuencia</th>}
+              {kind === 'gasto' && <th>Día de pago</th>}
               <th />
             </tr>
           </thead>
@@ -418,6 +437,32 @@ function CategoriesCard({
                         </option>
                       ))}
                     </select>
+                  </td>
+                )}
+                {kind === 'gasto' && (
+                  <td>
+                    {c.is_fixed || c.frequency === 'anual' ? (
+                      <input
+                        className="inline-input day-input"
+                        type="number"
+                        min="1"
+                        max="31"
+                        placeholder="—"
+                        aria-label="Día de pago"
+                        defaultValue={c.due_day ?? ''}
+                        onBlur={(e) => {
+                          const raw = e.target.value.trim()
+                          const day = raw === '' ? null : Number(raw)
+                          if (day !== null && !(day >= 1 && day <= 31)) {
+                            e.target.value = String(c.due_day ?? '')
+                            return
+                          }
+                          if (day !== c.due_day) update(c.id, { due_day: day })
+                        }}
+                      />
+                    ) : (
+                      <span className="muted small">—</span>
+                    )}
                   </td>
                 )}
                 <td className="right actions-cell">

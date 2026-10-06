@@ -1305,3 +1305,19 @@ select.inline-input {
     font-size: 16px;
   }
 }
+
+.day-input {
+  width: 4.5rem;
+  border-color: var(--border);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.install-help {
+  margin-top: 0.75rem;
+}
+
+.install-help summary {
+  cursor: pointer;
+  color: var(--accent);
+}
