@@ -177,3 +177,118 @@ export function monthLabelFromNow(n: number, today = new Date()) {
   const d = new Date(today.getFullYear(), today.getMonth() + n, 1)
   return new Intl.DateTimeFormat('es-CO', { month: 'long', year: 'numeric' }).format(d)
 }
+
+export type LumpSumOption = {
+  id: string
+  // Lo que realmente se abona (no más que el saldo de la deuda)
+  applied: number
+  interestSaved: number
+  // Meses que se adelanta la salida de todas las deudas
+  monthsSaved: number
+  // Meses que se adelanta el pago de esta deuda en particular
+  ownMonthsSaved: number | null
+}
+
+export type LumpSumAnalysis = {
+  base: StrategyResult
+  // Abonar todo a cada deuda por separado
+  options: LumpSumOption[]
+  // Reparto recomendado: el abono va a la deuda que más intereses ahorra; si sobra (porque
+  // la deuda queda pagada), el resto va a la siguiente mejor
+  allocation: { id: string; amount: number }[]
+  allocationResult: StrategyResult
+}
+
+const withPayment = (debts: DebtInput[], id: string, amount: number) =>
+  debts.map((d) => (d.id === id ? { ...d, balance: Math.max(0, d.balance - amount) } : d))
+
+// Compara abonar un monto único hoy a cada deuda, dentro del mismo plan de pagos (estrategia
+// y pago extra mensual), para ver cuál ahorra más intereses.
+export function analyzeLumpSum(
+  debts: DebtInput[],
+  strategy: Strategy,
+  extra: number,
+  amount: number,
+): LumpSumAnalysis {
+  const base = simulate(debts, strategy, extra)
+  const evaluate = (current: DebtInput[], id: string, value: number) => {
+    const debt = current.find((d) => d.id === id)!
+    const applied = Math.min(value, debt.balance)
+    const result = simulate(withPayment(current, id, applied), strategy, extra)
+    return { applied, result }
+  }
+
+  const options = debts.map((d) => {
+    const { applied, result } = evaluate(debts, d.id, amount)
+    return {
+      id: d.id,
+      applied,
+      interestSaved: base.totalInterest - result.totalInterest,
+      monthsSaved: base.months - result.months,
+      ownMonthsSaved:
+        base.payoffMonth[d.id] != null && result.payoffMonth[d.id] != null
+          ? base.payoffMonth[d.id]! - result.payoffMonth[d.id]!
+          : null,
+    }
+  })
+  options.sort((a, b) => b.interestSaved - a.interestSaved)
+
+  // Reparto: se prueban varias formas de distribuir el abono y se queda la que deja menos
+  // intereses. (a) por porciones, cada una a la deuda donde más ahorra en ese momento;
+  // (b) llenando las deudas en orden de mayor tasa; (c) toda la mejor opción individual y el
+  // resto por porciones.
+  const apply = (allocation: Map<string, number>) =>
+    debts.map((d) => ({ ...d, balance: Math.max(0, d.balance - (allocation.get(d.id) ?? 0)) }))
+  const cost = (allocation: Map<string, number>) => simulate(apply(allocation), strategy, extra)
+
+  const byChunks = (start: Map<string, number>, value: number) => {
+    const allocation = new Map(start)
+    const steps = 40
+    const chunk = value / steps
+    for (let i = 0; i < steps; i++) {
+      let bestId: string | null = null
+      let bestInterest = Infinity
+      for (const d of debts) {
+        const left = d.balance - (allocation.get(d.id) ?? 0)
+        if (left <= 0.5) continue
+        const trial = new Map(allocation)
+        trial.set(d.id, (trial.get(d.id) ?? 0) + Math.min(chunk, left))
+        const interest = cost(trial).totalInterest
+        if (interest < bestInterest) {
+          bestInterest = interest
+          bestId = d.id
+        }
+      }
+      if (!bestId) break
+      const left = debts.find((d) => d.id === bestId)!.balance - (allocation.get(bestId) ?? 0)
+      allocation.set(bestId, (allocation.get(bestId) ?? 0) + Math.min(chunk, left))
+    }
+    return allocation
+  }
+
+  const byRate = new Map<string, number>()
+  let remaining = amount
+  for (const d of [...debts].sort((a, b) => (b.annualEa ?? 0) - (a.annualEa ?? 0))) {
+    const value = Math.min(remaining, d.balance)
+    if (value > 0) byRate.set(d.id, value)
+    remaining -= value
+  }
+
+  const bestSingle = options[0]
+  const singleThenChunks = bestSingle
+    ? byChunks(new Map([[bestSingle.id, bestSingle.applied]]), amount - bestSingle.applied)
+    : new Map<string, number>()
+
+  const candidates = [byChunks(new Map(), amount), byRate, singleThenChunks].map((allocation) => ({
+    allocation,
+    result: cost(allocation),
+  }))
+  const best = candidates.sort((a, b) => a.result.totalInterest - b.result.totalInterest)[0]
+  const allocation = [...best.allocation.entries()]
+    .filter(([, value]) => value > 0.5)
+    .map(([id, value]) => ({ id, amount: Math.round(value) }))
+    .sort((a, b) => b.amount - a.amount)
+  const currentResult = best.result
+
+  return { base, options, allocation, allocationResult: currentResult }
+}

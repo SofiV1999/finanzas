@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { toCop, useData } from '../lib/data'
 import {
   amortization,
+  analyzeLumpSum,
   monthLabelFromNow,
   monthlyRate,
   simulate,
@@ -172,10 +173,162 @@ export default function DebtPlan() {
               )
             })}
           </div>
+
+          <LumpSum
+            debts={debts}
+            strategy={selected}
+            extra={extra}
+            names={new Map(debts.map((d) => [d.id, d.name]))}
+          />
         </>
       )}
 
       {tableFor && <AmortizationModal account={tableFor} onClose={() => setTableFor(null)} />}
+    </div>
+  )
+}
+
+const LUMP_KEY = 'finanzas:abono-unico'
+
+function readLump() {
+  try {
+    return localStorage.getItem(LUMP_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+// Simulador de un abono único a capital: a qué deuda conviene ponerlo
+function LumpSum({
+  debts,
+  strategy,
+  extra,
+  names,
+}: {
+  debts: DebtInput[]
+  strategy: Strategy
+  extra: number
+  names: Map<string, string>
+}) {
+  const [digits, setDigits] = useState(readLump)
+  const amount = Number(digits || 0)
+
+  function change(value: string) {
+    const next = value.replace(/\D/g, '')
+    setDigits(next)
+    try {
+      localStorage.setItem(LUMP_KEY, next)
+    } catch {
+      // Sin almacenamiento local: el valor no se recuerda
+    }
+  }
+
+  const analysis = amount > 0 ? analyzeLumpSum(debts, strategy, extra, amount) : null
+  const best = analysis?.options[0]
+  const allocationSaved = analysis
+    ? analysis.base.totalInterest - analysis.allocationResult.totalInterest
+    : 0
+  const split = analysis && analysis.allocation.length > 1
+  const months = (n: number | null) =>
+    n == null ? '—' : n <= 0 ? 'igual' : `${n} ${n === 1 ? 'mes' : 'meses'} antes`
+
+  return (
+    <div className="lump">
+      <h3 className="plan-subtitle">Abono único a capital</h3>
+      <p className="muted small">
+        Si hoy abonas un monto extra, ¿a qué deuda conviene? Se calcula con el plan seleccionado
+        arriba ({strategyInfo[strategy].title.toLowerCase()}
+        {extra > 0 ? ` + ${formatMoney(extra)} extra al mes` : ''}) y suponiendo que el banco reduce
+        el plazo, no la cuota.
+      </p>
+      <div className="row lump-input">
+        <label htmlFor="lump-amount" className="muted small">
+          Monto del abono
+        </label>
+        <input
+          id="lump-amount"
+          className="inline-input amount-input"
+          inputMode="numeric"
+          placeholder="0"
+          value={digits ? groupDigits.format(amount) : ''}
+          onChange={(e) => change(e.target.value)}
+        />
+      </div>
+
+      {analysis?.base.neverPaysOff && (
+        <p className="small warning-text">
+          Con los pagos actuales alguna deuda nunca se termina de pagar, así que los ahorros se
+          calculan sobre 50 años. Revisa los pagos mensuales o agrega un pago extra.
+        </p>
+      )}
+
+      {analysis && best && (
+        <>
+          <div className="lump-reco card">
+            {split ? (
+              <>
+                <strong>Recomendación:</strong> repártelo así:{' '}
+                {analysis.allocation
+                  .map((a) => `${names.get(a.id)} ${formatMoney(a.amount)}`)
+                  .join(' · ')}
+                . Te ahorras <strong className="text-income">{formatMoney(allocationSaved)}</strong>{' '}
+                en intereses ({formatMoney(allocationSaved - best.interestSaved)} más que ponerlo
+                todo en {names.get(best.id)}).
+              </>
+            ) : (
+              <>
+                <strong>Recomendación:</strong> abónalo a <strong>{names.get(best.id)}</strong>. Te
+                ahorras <strong className="text-income">{formatMoney(best.interestSaved)}</strong>{' '}
+                en intereses
+                {best.monthsSaved > 0 && ` y sales de todas tus deudas ${months(best.monthsSaved)}`}
+                .
+              </>
+            )}
+          </div>
+          <div className="table-wrap">
+            <table className="table lump-table">
+              <thead>
+                <tr>
+                  <th>Si lo abonas a…</th>
+                  <th className="right">Tasa</th>
+                  <th className="right">Se abona</th>
+                  <th className="right">Intereses que ahorras</th>
+                  <th className="right">Esa deuda se paga</th>
+                  <th className="right">Sales de deudas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analysis.options.map((o, i) => {
+                  const d = debts.find((x) => x.id === o.id)!
+                  return (
+                    <tr key={o.id}>
+                      <td>
+                        {names.get(o.id)}{' '}
+                        {i === 0 && <span className="tag tag-paid">Mejor opción</span>}
+                      </td>
+                      <td className="right">
+                        {d.annualEa != null ? `${(d.annualEa * 100).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="right tabular">
+                        {formatMoney(o.applied)}
+                        {o.applied < amount && <div className="muted small">saldo completo</div>}
+                      </td>
+                      <td className="right tabular text-income">{formatMoney(o.interestSaved)}</td>
+                      <td className="right">{months(o.ownMonthsSaved)}</td>
+                      <td className="right">{months(o.monthsSaved)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted small">
+            La mejor deuda depende del plan: con solo mínimos, la cuota de una deuda pagada no pasa
+            a las demás, así que a veces conviene más una deuda larga que la de mayor tasa. Con bola
+            de nieve o avalancha, esa cuota se reasigna.
+          </p>
+        </>
+      )}
     </div>
   )
 }

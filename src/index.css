@@ -1230,3 +1230,30 @@ select.inline-input {
 .loan-kind .segment.active {
   background: var(--surface-2);
 }
+
+.lump {
+  margin-top: 0.5rem;
+}
+
+.lump-input {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.lump-reco {
+  background: var(--accent-bg);
+  border-color: transparent;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.lump-table td {
+  font-size: 0.85rem;
+  vertical-align: top;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+
+.tag {
+  white-space: nowrap;
+}
