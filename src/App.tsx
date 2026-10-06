@@ -10,16 +10,18 @@ import Deudas from './pages/Deudas'
 import Login from './pages/Login'
 import Movimientos from './pages/Movimientos'
 import Presupuesto from './pages/Presupuesto'
-import SectionPage from './pages/SectionPage'
+import Reportes from './pages/Reportes'
+import Resumen from './pages/Resumen'
 import SetupNeeded from './pages/SetupNeeded'
 import { sections } from './sections'
 
-// Secciones ya construidas; el resto muestra lo que vendrá
 const pages: Record<string, ReactElement> = {
+  '/': <Resumen />,
   '/movimientos': <Movimientos />,
   '/presupuesto': <Presupuesto />,
   '/deudas': <Deudas />,
   '/ahorros': <Ahorros />,
+  '/reportes': <Reportes />,
   '/configuracion': <Configuracion />,
 }
 
@@ -37,11 +39,7 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             {sections.map((s) => (
-              <Route
-                key={s.path}
-                path={s.path}
-                element={pages[s.path] ?? <SectionPage section={s} />}
-              />
+              <Route key={s.path} path={s.path} element={pages[s.path]} />
             ))}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

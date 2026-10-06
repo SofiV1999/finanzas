@@ -89,6 +89,11 @@ function AccountRow({ account: a, onClick }: { account: AccountWithBalance; onCl
   const debt = isDebt(a.type)
   const owed = debt ? Math.max(0, -a.balance) : 0
   const used = a.type === 'tarjeta_credito' && a.credit_limit ? owed / a.credit_limit : null
+  // Préstamos: cuánto del monto prestado ya se pagó
+  const paidShare =
+    a.type === 'prestamo' && a.original_amount
+      ? Math.max(0, Math.min(1, (a.original_amount - owed) / a.original_amount))
+      : null
 
   return (
     <button className={`account-row${a.archived ? ' archived' : ''}`} onClick={onClick}>
@@ -103,10 +108,22 @@ function AccountRow({ account: a, onClick }: { account: AccountWithBalance; onCl
         {used != null && (
           <div className="meter" title={`${Math.round(used * 100)}% del cupo usado`}>
             <div
-              className={`meter-fill${used > 0.7 ? ' warn' : ''}`}
+              className={`meter-fill${used > 1 ? ' over' : used > 0.7 ? ' warn' : ''}`}
               style={{ width: `${Math.min(100, used * 100)}%` }}
             />
           </div>
+        )}
+        {paidShare != null && (
+          <>
+            <div className="meter" title={`${Math.round(paidShare * 100)}% pagado`}>
+              <div className="meter-fill" style={{ width: `${paidShare * 100}%` }} />
+            </div>
+            <span className="muted small">
+              Llevas pagado {Math.round(paidShare * 100)}% (
+              {formatMoney(a.original_amount! - owed, a.currency)} de{' '}
+              {formatMoney(a.original_amount!, a.currency)})
+            </span>
+          </>
         )}
       </div>
       <div className="account-amount">

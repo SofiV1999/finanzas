@@ -5,10 +5,9 @@ export type Section = {
   short: string
   icon: string
   description: string
-  coming: string[]
 }
 
-// Secciones de la app. Las de fases futuras muestran qué van a contener.
+// Secciones de la app (menú lateral y barra inferior del celular)
 export const sections: Section[] = [
   {
     path: '/',
@@ -16,12 +15,6 @@ export const sections: Section[] = [
     short: 'Inicio',
     icon: '📊',
     description: 'Tu panorama financiero de un vistazo.',
-    coming: [
-      'Patrimonio neto (lo que tienes − lo que debes)',
-      'Ingresos y gastos del mes',
-      '50/30/20 real vs. meta',
-      'Presupuesto por categoría y próximos pagos de tarjetas',
-    ],
   },
   {
     path: '/movimientos',
@@ -29,11 +22,6 @@ export const sections: Section[] = [
     short: 'Movim.',
     icon: '🧾',
     description: 'Registro único de ingresos, gastos, pagos y traslados.',
-    coming: [
-      'Registro sin límite de filas',
-      'Filtros por mes, año, categoría y cuenta',
-      'Montos en COP y USD con TRM automática',
-    ],
   },
   {
     path: '/presupuesto',
@@ -41,11 +29,6 @@ export const sections: Section[] = [
     short: 'Presup.',
     icon: '🎯',
     description: 'Presupuesto mensual por categoría.',
-    coming: [
-      'Plantilla base que se copia cada mes',
-      'Gastos fijos (facturas) y variables',
-      'Presupuestado vs. real',
-    ],
   },
   {
     path: '/deudas',
@@ -53,11 +36,6 @@ export const sections: Section[] = [
     short: 'Deudas',
     icon: '💳',
     description: 'Tarjetas de crédito y préstamos.',
-    coming: [
-      'Tarjetas: cupo, fecha de corte y de pago',
-      'Préstamos con amortización (tasa E.A.)',
-      'Bola de nieve vs. avalancha y simulador de pagos extra',
-    ],
   },
   {
     path: '/ahorros',
@@ -65,11 +43,6 @@ export const sections: Section[] = [
     short: 'Ahorros',
     icon: '🏦',
     description: 'Cuentas, inversiones y metas financieras.',
-    coming: [
-      'Cuentas de ahorro, CDT, fondos e inversiones',
-      'Metas con monto y fecha (inversión, emergencia…)',
-      'Avance de cada meta',
-    ],
   },
   {
     path: '/reportes',
@@ -77,7 +50,6 @@ export const sections: Section[] = [
     short: 'Reportes',
     icon: '📈',
     description: 'Gráficas por mes y año.',
-    coming: ['Tendencia de ingresos y gastos', 'Gasto por categoría', 'Comparación entre años'],
   },
   {
     path: '/configuracion',
@@ -85,6 +57,5 @@ export const sections: Section[] = [
     short: 'Ajustes',
     icon: '⚙️',
     description: 'Categorías, metas 50/30/20 y monedas.',
-    coming: ['Categorías editables', 'Porcentajes 50/30/20', 'Salario y moneda principal'],
   },
 ]
