@@ -201,18 +201,17 @@ export default function Movimientos() {
           <strong>{formatMoney(flow.debtPayments)}</strong>
         </div>
         <div className="card stat">
-          <span className="muted small">Flujo de caja</span>
+          <span className="muted small">Balance</span>
           <strong className={flow.net < 0 ? 'text-expense' : 'text-income'}>
             {formatMoney(flow.net)}
           </strong>
-          <span className="muted small">Lo que entró menos lo que salió de tus cuentas</span>
         </div>
       </div>
       <p className="muted small">
         {period === 'mes' ? formatMonth(month) : `Año ${year}`} · {filtered.length} movimientos ·
-        montos en USD con la TRM del día del movimiento. Flujo de caja = ingresos − gastos pagados
-        con tus cuentas − pagos a deudas (las compras con tarjeta salen de caja cuando pagas la
-        tarjeta, así no se cuentan dos veces). Los traslados entre tus cuentas no cuentan.
+        montos en USD con la TRM del día del movimiento. Balance = ingresos − gastos − pagos a
+        deudas (las compras con tarjeta se descuentan al pagar la tarjeta, para no restarlas dos
+        veces). Los traslados entre tus cuentas no cuentan.
       </p>
 
       {error && <p className="error">{error}</p>}
