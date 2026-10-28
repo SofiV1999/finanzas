@@ -182,6 +182,44 @@ caso('Bancolombia: formato nuevo queda como desconocido', () => {
   parcial(a, { kind: 'desconocido', amount: 200000, account_digits: '3333' })
 })
 
+caso('Bancolombia: compra rechazada y avisos sin movimiento se ignoran', () => {
+  const rechazada =
+    'Notificación Transaccional Bancolombia: tu compra en TIENDA X por $20.000,00 no fue exitosa, el cupo de tu T.Credito *1111 no se afecto. 18:12.28/09/2026.'
+  assert.equal(leer(BANCOLOMBIA, rechazada), null)
+  assert.equal(leer(BANCOLOMBIA, rechazada.replace('$20.000,00', 'USD20,00')), null)
+  assert.equal(
+    leer(
+      BANCOLOMBIA,
+      'Por tu seguridad ¡Ya está lista! Bancolombia: Encendiste tu tarjeta credito *1111 el 29/09/2026 07:56. Activaste las transacciones.',
+    ),
+    null,
+  )
+  assert.equal(
+    leer(
+      BANCOLOMBIA,
+      '¡Te interesa! Buenas noticias: La factura que inscribiste CLARO MOVIL COM con referencia 12341022 está lista para que la pagues. Vence el 09/11/2026.',
+    ),
+    null,
+  )
+})
+
+caso('Davivienda: aviso del crédito sin clase de movimiento se ignora', () => {
+  assert.equal(
+    leer(
+      DAVIVIENDA,
+      `Apreciado(a) ANA:
+Le informamos que se ha registrado el siguiente movimiento de su terminada (o) en ****6666:
+Fecha: 2026/09/28
+Hora: 20:07:43
+Valor Transacción: $1,543,000
+Clase de Movimiento:
+Lugar de Transacción: BTA PROCESOS ESP.`,
+      'DAVIVIENDA',
+    ),
+    null,
+  )
+})
+
 caso('Bancolombia: publicidad se ignora', () => {
   assert.equal(leer(BANCOLOMBIA, '¡Conoce nuestros nuevos beneficios!'), null)
 })

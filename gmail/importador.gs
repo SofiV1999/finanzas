@@ -171,6 +171,8 @@ function leerBancolombia_(plano) {
   let fecha = null
   const f = /(\d{2})\/(\d{2})\/(\d{2,4})\.?(?:\s*(?:a las)?\s*(\d{1,2}):(\d{2}))?/.exec(plano)
   if (f) fecha = fechaColombia_(f[3], f[2], f[1], f[4] || 12, f[5] || 0)
+  // Compras rechazadas y avisos que no mueven plata
+  if (/no fue exitosa|rechazad|no se afect/i.test(t)) return null
   const base = { bank: 'bancolombia', occurred_at: fecha, summary: resumen, details: {} }
   let m
 
