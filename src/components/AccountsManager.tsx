@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { toCop, useData } from '../lib/data'
 import { todayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
@@ -17,6 +17,44 @@ import Modal from './Modal'
 
 type Mode = 'activos' | 'deudas'
 
+// Intereses y seguro registrados en cada préstamo (gastos cargados al préstamo con cada cuota)
+type LoanCosts = { interest: number; insurance: number; interestYear: number }
+
+function useLoanCosts(loanIds: string[]) {
+  const { categories, version } = useData()
+  const [costs, setCosts] = useState(new Map<string, LoanCosts>())
+  const key = loanIds.join(',')
+  useEffect(() => {
+    if (!key) return
+    let cancelled = false
+    supabase
+      .from('transactions')
+      .select('account_id, amount, date, category_id')
+      .eq('type', 'gasto')
+      .in('account_id', key.split(','))
+      .then(({ data }) => {
+        if (cancelled || !data) return
+        const insurance = new Set(categories.filter((c) => c.name === 'Seguros').map((c) => c.id))
+        const year = todayIso().slice(0, 4)
+        const map = new Map<string, LoanCosts>()
+        for (const t of data) {
+          const c = map.get(t.account_id) ?? { interest: 0, insurance: 0, interestYear: 0 }
+          if (insurance.has(t.category_id ?? '')) c.insurance += Number(t.amount)
+          else {
+            c.interest += Number(t.amount)
+            if (t.date.startsWith(year)) c.interestYear += Number(t.amount)
+          }
+          map.set(t.account_id, c)
+        }
+        setCosts(map)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [key, categories, version])
+  return costs
+}
+
 export default function AccountsManager({ mode }: { mode: Mode }) {
   const { accounts, latestTrm } = useData()
   const [editing, setEditing] = useState<AccountWithBalance | 'new' | null>(null)
@@ -26,6 +64,9 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
   const mine = accounts.filter((a) => types.includes(a.type))
   const visible = mine.filter((a) => showArchived || !a.archived)
   const archivedCount = mine.length - mine.filter((a) => !a.archived).length
+  const loanCosts = useLoanCosts(
+    mode === 'deudas' ? mine.filter((a) => a.type === 'prestamo').map((a) => a.id) : [],
+  )
   const totalCop = mine
     .filter((a) => !a.archived)
     .reduce((sum, a) => sum + toCop(a.balance, a.currency, latestTrm?.rate), 0)
@@ -69,7 +110,12 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
       ) : (
         <div className="account-list">
           {visible.map((a) => (
-            <AccountRow key={a.id} account={a} onClick={() => setEditing(a)} />
+            <AccountRow
+              key={a.id}
+              account={a}
+              costs={loanCosts.get(a.id)}
+              onClick={() => setEditing(a)}
+            />
           ))}
         </div>
       )}
@@ -85,7 +131,15 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
   )
 }
 
-function AccountRow({ account: a, onClick }: { account: AccountWithBalance; onClick: () => void }) {
+function AccountRow({
+  account: a,
+  costs,
+  onClick,
+}: {
+  account: AccountWithBalance
+  costs?: LoanCosts
+  onClick: () => void
+}) {
   const { latestTrm } = useData()
   const debt = isDebt(a.type)
   const owed = debt ? Math.max(0, -a.balance) : 0
@@ -125,6 +179,14 @@ function AccountRow({ account: a, onClick }: { account: AccountWithBalance; onCl
               {formatMoney(a.original_amount!, a.currency)})
             </span>
           </>
+        )}
+        {costs && costs.interest + costs.insurance > 0 && (
+          <span className="muted small">
+            Intereses pagados {formatMoney(costs.interest, a.currency)}
+            {costs.interestYear !== costs.interest &&
+              ` (${formatMoney(costs.interestYear, a.currency)} este año)`}
+            {costs.insurance > 0 && ` · seguro ${formatMoney(costs.insurance, a.currency)}`}
+          </span>
         )}
       </div>
       <div className="account-amount">
