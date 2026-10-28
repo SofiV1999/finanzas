@@ -329,7 +329,7 @@ export default function ImportInbox() {
       </p>
 
       {(showAll ? groups : groups.slice(0, SHOWN)).map((group) => {
-        const { preset, ready, needsForm, cdt, ask } = group.suggestion
+        const { preset, ready, needsForm, cdt, ask, foreign } = group.suggestion
         const check = checks.get(group.key)
         const first = group.items[0]
         const account = preset.accountId ? accountById.get(preset.accountId) : undefined
@@ -361,7 +361,11 @@ export default function ImportInbox() {
               </span>
               <strong className={`tx-${preset.type}`}>
                 {sign}
-                {preset.amount ? formatMoney(preset.amount, currency) : '—'}
+                {preset.amount
+                  ? formatMoney(preset.amount, currency)
+                  : first.amount
+                    ? formatMoney(first.amount, first.currency)
+                    : '—'}
               </strong>
             </div>
             <div className="muted small">
@@ -376,6 +380,13 @@ export default function ImportInbox() {
                 </span>
               )}
             </div>
+            {foreign && (
+              <div className="small warning-text">
+                Compra en {first.currency} con una cuenta en {currency}. Crea la parte en{' '}
+                {first.currency === 'USD' ? 'dólares' : 'pesos'} de la tarjeta (otra cuenta con los
+                mismos dígitos) o escribe el valor en {currency} al revisarla.
+              </div>
+            )}
             {ask && (
               <div className="small muted">
                 Este comercio tiene varias categorías: elige la de esta compra al revisarlo.

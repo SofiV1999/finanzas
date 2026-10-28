@@ -76,14 +76,26 @@ export function prettyName(text: string) {
 // aprendidas con él solo aplican a esa cuenta
 const isMovementClass = (item: BankImport) => item.bank === 'davivienda' && item.kind !== 'compra'
 
-export function accountByDigits(digits: string | null, accounts: AccountWithBalance[]) {
+// Cuenta con esos dígitos. Una tarjeta que factura en pesos y en dólares son dos cuentas con
+// los mismos dígitos: se prefiere la de la moneda del movimiento y luego las no archivadas
+export function accountByDigits(
+  digits: string | null,
+  accounts: AccountWithBalance[],
+  currency?: string,
+) {
   if (!digits) return undefined
-  return accounts.find((a) => a.match_digits?.includes(digits))
+  return accounts
+    .filter((a) => a.match_digits?.includes(digits))
+    .sort(
+      (a, b) =>
+        Number(b.currency === currency) - Number(a.currency === currency) ||
+        Number(a.archived) - Number(b.archived),
+    )[0]
 }
 
 // Tu cuenta en la que cae la alerta
 export function ownAccount(item: BankImport, accounts: AccountWithBalance[]) {
-  const byDigits = accountByDigits(item.account_digits, accounts)
+  const byDigits = accountByDigits(item.account_digits, accounts, item.currency)
   if (byDigits) return byDigits
   const active = accounts.filter((a) => !a.archived)
   // ARQ no menciona números: va a tu cuenta en dólares
@@ -94,7 +106,7 @@ export function ownAccount(item: BankImport, accounts: AccountWithBalance[]) {
 // La otra cuenta, si también es tuya: por sus dígitos o, en el pago de Nu, por el nombre del
 // banco de origen ("BANCOLOMBIA")
 function otherOwnAccount(item: BankImport, accounts: AccountWithBalance[]) {
-  const byDigits = accountByDigits(item.counterparty_digits, accounts)
+  const byDigits = accountByDigits(item.counterparty_digits, accounts, item.currency)
   if (byDigits || item.kind !== 'pago_tarjeta' || !item.counterparty) return byDigits
   const bank = normalizeName(item.counterparty)
   return accounts.find(
@@ -142,6 +154,8 @@ export type Suggestion = {
   cdt: boolean
   // La regla pide elegir la categoría cada vez
   ask: boolean
+  // El movimiento viene en otra moneda que la cuenta
+  foreign: boolean
 }
 
 function finish(
@@ -161,7 +175,14 @@ function finish(
     from?.currency === 'USD' ||
     to?.currency === 'USD' ||
     to?.type === 'prestamo'
-  return { preset, ready, needsForm, cdt: Boolean(extra.cdt), ask: Boolean(extra.ask) }
+  return {
+    preset,
+    ready,
+    needsForm,
+    cdt: Boolean(extra.cdt),
+    ask: Boolean(extra.ask),
+    foreign: Boolean(extra.foreign),
+  }
 }
 
 export function suggest(
@@ -172,18 +193,21 @@ export function suggest(
   const own = ownAccount(item, accounts)
   const other = otherOwnAccount(item, accounts)
   const out = item.direction !== 'in'
+  // Compra en dólares en una cuenta en pesos: el valor en pesos se escribe al revisar
+  const foreign = Boolean(own && own.currency !== item.currency)
+  const name =
+    item.counterparty && !isMovementClass(item) && item.kind !== 'cdt'
+      ? prettyName(item.counterparty)
+      : undefined
   const base: TransactionPreset = {
-    amount: item.amount ?? undefined,
+    amount: foreign ? undefined : (item.amount ?? undefined),
     date: bogotaDate(item.occurred_at),
     description:
-      item.counterparty && !isMovementClass(item) && item.kind !== 'cdt'
-        ? prettyName(item.counterparty)
-        : undefined,
+      foreign && item.amount
+        ? `${name ?? ''} (${item.currency} ${item.amount.toLocaleString('es-CO')})`.trim()
+        : name,
   }
-  const extra: Parameters<typeof finish>[2] = {
-    fee: Boolean(item.fee),
-    foreign: Boolean(own && own.currency !== item.currency),
-  }
+  const extra: Parameters<typeof finish>[2] = { fee: Boolean(item.fee), foreign }
 
   if (item.kind === 'cdt') {
     const cdt = accounts.find(

@@ -81,6 +81,20 @@ caso('Bancolombia: compra con tarjeta débito', () => {
   })
 })
 
+caso('Bancolombia: compra en dólares con tarjeta de crédito', () => {
+  const a = leer(
+    BANCOLOMBIA,
+    'Bancolombia: Compraste USD20,00 en ANTHROPIC* CLAUDE SUB, el 28/09/2026 a las 18:12. Esta compra esta asociada a T.Cred *1111. Si tienes dudas, encuentranos aqui: 018000931987.',
+  )
+  parcial(a, {
+    kind: 'compra',
+    amount: 20,
+    currency: 'USD',
+    counterparty: 'ANTHROPIC* CLAUDE SUB',
+    account_digits: '1111',
+  })
+})
+
 caso('Bancolombia: transferencia a una cuenta', () => {
   const a = leer(
     BANCOLOMBIA,
