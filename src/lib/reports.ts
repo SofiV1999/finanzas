@@ -53,8 +53,20 @@ export type MonthTotals = {
   expenses: number
   needs: number
   wants: number
-  // Ingreso menos necesidades y deseos (incluye abonos a capital y lo que se ahorra)
+  // Ingreso menos necesidades y deseos (incluye abonos extra a capital y lo que se ahorra)
   savings: number
+}
+
+export const EXTRA_PAYMENT = 'Abono extra a capital'
+
+// La cuota de un préstamo es una necesidad: el capital es un traslado al préstamo (los intereses
+// ya son gasto). Los abonos extra a capital sí cuentan como ahorro.
+export function makeLoanInstallment(accounts: AccountWithBalance[]) {
+  const loans = new Set(accounts.filter((a) => a.type === 'prestamo').map((a) => a.id))
+  return (t: Pick<Transaction, 'type' | 'to_account_id' | 'description'>) =>
+    t.type === 'traslado' &&
+    loans.has(t.to_account_id ?? '') &&
+    t.description?.trim() !== EXTRA_PAYMENT
 }
 
 // Convierte el monto de un movimiento a pesos con la TRM con la que se registró
@@ -69,7 +81,9 @@ export function monthlyTotals(
   year: number,
   categories: Category[],
   cop: (t: Transaction) => number,
+  accounts: AccountWithBalance[],
 ): MonthTotals[] {
+  const isInstallment = makeLoanInstallment(accounts)
   const group = new Map(categories.map((c) => [c.id, c.budget_group]))
   const months = MONTHS_SHORT.map((label, i) => ({
     month: i + 1,
@@ -81,10 +95,13 @@ export function monthlyTotals(
     savings: 0,
   }))
   for (const t of txs) {
-    if (Number(t.date.slice(0, 4)) !== year || t.type === 'traslado') continue
+    if (Number(t.date.slice(0, 4)) !== year) continue
     const m = months[Number(t.date.slice(5, 7)) - 1]
     const value = cop(t)
-    if (t.type === 'ingreso') {
+    if (t.type === 'traslado') {
+      // No es gasto nuevo (no suma a gastos), pero sale del ingreso como necesidad
+      if (isInstallment(t)) m.needs += value
+    } else if (t.type === 'ingreso') {
       m.income += value
     } else {
       m.expenses += value

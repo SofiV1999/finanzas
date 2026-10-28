@@ -41,12 +41,12 @@ export default function Reportes() {
 
   const cop = useMemo(() => makeCop(accounts, latestTrm?.rate), [accounts, latestTrm])
   const months = useMemo(
-    () => monthlyTotals(txs, year, categories, cop),
-    [txs, year, categories, cop],
+    () => monthlyTotals(txs, year, categories, cop, accounts),
+    [txs, year, categories, cop, accounts],
   )
   const prevMonths = useMemo(
-    () => monthlyTotals(txs, year - 1, categories, cop),
-    [txs, year, categories, cop],
+    () => monthlyTotals(txs, year - 1, categories, cop, accounts),
+    [txs, year, categories, cop, accounts],
   )
 
   // Solo meses que ya pasaron o están en curso

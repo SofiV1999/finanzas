@@ -51,7 +51,7 @@ export default function Resumen() {
 
   const cop = useMemo(() => makeCop(accounts, latestTrm?.rate), [accounts, latestTrm])
   const year = Number(month.slice(0, 4))
-  const thisMonth = monthlyTotals(txs, year, categories, cop)[Number(month.slice(5)) - 1]
+  const thisMonth = monthlyTotals(txs, year, categories, cop, accounts)[Number(month.slice(5)) - 1]
 
   // Patrimonio neto actual
   let assets = 0

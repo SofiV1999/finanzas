@@ -4,6 +4,7 @@ import { todayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
 import { supabase } from '../lib/supabase'
 import { monthlyRate } from '../lib/finance'
+import { EXTRA_PAYMENT } from '../lib/reports'
 import { fetchTrmForDate } from '../lib/trm'
 import {
   accountTypeLabels,
@@ -189,8 +190,7 @@ function TransactionFormInner({
       to_amount: crossCurrency ? Number(toAmount) : null,
       fx_rate: needsFx ? Number(fxRate) : null,
       description:
-        description.trim() ||
-        (loanPayment && loanKind === 'abono' ? 'Abono extra a capital' : null),
+        description.trim() || (loanPayment && loanKind === 'abono' ? EXTRA_PAYMENT : null),
     }
 
     // Intereses y seguro del préstamo: gastos cargados al préstamo (aumentan la deuda, y el

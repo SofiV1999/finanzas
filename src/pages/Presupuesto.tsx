@@ -4,6 +4,7 @@ import { MONTH_NAMES, annualProvision, effectiveBudget } from '../lib/budget'
 import { plannedIncomeCop, toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
+import { makeLoanInstallment } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import {
   budgetGroupLabels,
@@ -17,11 +18,13 @@ type EditMode = 'mes' | 'plantilla'
 type IncomeBase = 'planeado' | 'real'
 
 type Movement = {
-  type: 'ingreso' | 'gasto'
-  category_id: string
+  type: 'ingreso' | 'gasto' | 'traslado'
+  category_id: string | null
   amount: number
   fx_rate: number | null
   account_id: string
+  to_account_id: string | null
+  description: string | null
 }
 
 export default function Presupuesto() {
@@ -43,8 +46,7 @@ export default function Presupuesto() {
       supabase.from('budgets').select('*').eq('month', monthStart),
       supabase
         .from('transactions')
-        .select('type, category_id, amount, fx_rate, account_id')
-        .in('type', ['ingreso', 'gasto'])
+        .select('type, category_id, amount, fx_rate, account_id, to_account_id, description')
         .gte('date', monthStart)
         .lte('date', monthEnd(month)),
     ]).then(([b, t]) => {
@@ -60,19 +62,25 @@ export default function Presupuesto() {
 
   const currencyOf = useMemo(() => new Map(accounts.map((a) => [a.id, a.currency])), [accounts])
 
-  // Real del mes por categoría, en pesos
-  const realByCategory = useMemo(() => {
+  // Real del mes por categoría, en pesos, y lo pagado en cuotas de préstamos (capital)
+  const [realByCategory, loanInstallments] = useMemo(() => {
+    const isInstallment = makeLoanInstallment(accounts)
     const map = new Map<string, number>()
+    let loans = 0
     for (const m of movements) {
       const cop = toCop(
         m.amount,
         currencyOf.get(m.account_id) ?? 'COP',
         m.fx_rate ?? latestTrm?.rate,
       )
-      map.set(m.category_id, (map.get(m.category_id) ?? 0) + cop)
+      if (m.type === 'traslado') {
+        if (isInstallment(m)) loans += cop
+      } else if (m.category_id) {
+        map.set(m.category_id, (map.get(m.category_id) ?? 0) + cop)
+      }
     }
-    return map
-  }, [movements, currencyOf, latestTrm])
+    return [map, loans] as const
+  }, [movements, accounts, currencyOf, latestTrm])
 
   const overrideByCategory = new Map(budgets.map((b) => [b.category_id, b.amount]))
   const budgetFor = (c: Category) => effectiveBudget(c, month, overrideByCategory.get(c.id))
@@ -211,6 +219,7 @@ export default function Presupuesto() {
       <FiftyThirtyTwenty
         expenseCats={expenseCats}
         realByCategory={realByCategory}
+        loanInstallments={loanInstallments}
         budgetFor={budgetFor}
         income={base === 'real' ? realIncome : planned}
         base={base}
@@ -491,6 +500,7 @@ function BudgetInput({ value, onSave }: { value: number; onSave: (v: number) => 
 function FiftyThirtyTwenty({
   expenseCats,
   realByCategory,
+  loanInstallments,
   budgetFor,
   income,
   base,
@@ -499,6 +509,8 @@ function FiftyThirtyTwenty({
 }: {
   expenseCats: Category[]
   realByCategory: Map<string, number>
+  // Capital de las cuotas de préstamos del mes: es necesidad aunque sea un traslado
+  loanInstallments: number
   budgetFor: (c: Category) => number
   income: number
   base: IncomeBase
@@ -512,7 +524,7 @@ function FiftyThirtyTwenty({
     expenseCats.filter((c) => c.budget_group === group).reduce((s, c) => s + f(c), 0)
   const real = (c: Category) => realByCategory.get(c.id) ?? 0
 
-  const needs = sum('necesidad', real)
+  const needs = sum('necesidad', real) + loanInstallments
   const wants = sum('deseo', real)
   // Ahorro = lo que queda del ingreso después de necesidades y deseos
   const savings = income - needs - wants
@@ -584,7 +596,12 @@ function FiftyThirtyTwenty({
               <div className="fifty-target" style={{ left: `${r.target * 100}%` }} title="Meta" />
             </div>
             <div className="budget-foot muted small">
-              <span>Real {formatMoney(r.real)}</span>
+              <span>
+                Real {formatMoney(r.real)}
+                {r.label === 'Necesidades' && loanInstallments > 0 && (
+                  <> · {formatMoney(loanInstallments)} en cuotas de préstamos</>
+                )}
+              </span>
               <span>
                 Presupuestado {formatMoney(r.budget)} · Meta {formatMoney(income * r.target)}
               </span>
@@ -593,9 +610,10 @@ function FiftyThirtyTwenty({
         )
       })}
       <p className="muted small">
-        El ahorro es lo que queda del ingreso después de necesidades y deseos: incluye lo que pasas
-        a ahorros o inversiones y lo que abonas a capital de tus deudas. En automático se usa el
-        ingreso planeado mientras el mes está en curso y aún no ha entrado todo tu ingreso.
+        Las cuotas de tus préstamos cuentan como necesidad. El ahorro es lo que queda del ingreso
+        después de necesidades y deseos: incluye lo que pasas a ahorros o inversiones y los abonos
+        extra a capital. En automático se usa el ingreso planeado mientras el mes está en curso y
+        aún no ha entrado todo tu ingreso.
       </p>
     </div>
   )
