@@ -8,6 +8,7 @@ import { EXTRA_PAYMENT } from '../lib/reports'
 import { fetchTrmForDate } from '../lib/trm'
 import {
   accountTypeLabels,
+  beforeOpening,
   isDebt,
   sortByGroup,
   type AccountWithBalance,
@@ -118,7 +119,8 @@ function TransactionFormInner({
   const [description, setDescription] = useState(initial?.description ?? preset?.description ?? '')
   // Pago de préstamo: parte de la cuota que es interés y seguro (se registran como gasto)
   const [interestText, setInterestText] = useState<string | null>(null)
-  const [insuranceText, setInsuranceText] = useState('')
+  // null = el seguro mensual del préstamo (Deudas)
+  const [insuranceText, setInsuranceText] = useState<string | null>(null)
   // Cuota mensual (incluye intereses) o abono extra (todo va a capital)
   const [loanKind, setLoanKind] = useState<'cuota' | 'abono'>('cuota')
   // Repetir cada mes (crea un movimiento programado)
@@ -142,7 +144,9 @@ function TransactionFormInner({
     : 0
   const isInstallment = loanPayment && loanKind === 'cuota'
   const interest = isInstallment ? Number(interestText ?? estimatedInterest) || 0 : 0
-  const insurance = isInstallment ? Number(insuranceText) || 0 : 0
+  const insurance = isInstallment
+    ? Number(insuranceText ?? toAccount?.monthly_insurance ?? 0) || 0
+    : 0
   const principal = Number(amount) - interest - insurance
   const findCategory = (name: string) =>
     categories.find((c) => c.kind === 'gasto' && c.name === name && !c.archived)
@@ -377,6 +381,16 @@ function TransactionFormInner({
             />
           </div>
         </div>
+        {beforeOpening(date, account, isTransfer ? toAccount : undefined).length > 0 && (
+          <p className="small muted">
+            Es anterior a la fecha del saldo inicial de{' '}
+            {beforeOpening(date, account, isTransfer ? toAccount : undefined)
+              .map((a) => a.name)
+              .join(' y ')}
+            : no cambia su saldo (ya está incluido en él), pero sí cuenta en el presupuesto y los
+            reportes.
+          </p>
+        )}
 
         <div className={isTransfer ? 'grid-2' : undefined}>
           <AccountSelect
@@ -488,10 +502,12 @@ function TransactionFormInner({
                     min="0"
                     step="any"
                     placeholder="0"
-                    value={insuranceText}
+                    value={insuranceText ?? String(toAccount.monthly_insurance ?? '')}
                     onChange={(e) => setInsuranceText(e.target.value)}
                   />
-                  <small className="muted">Si la cuota incluye seguro de vida deudor</small>
+                  <small className="muted">
+                    Si la cuota incluye seguro de vida deudor (se llena con el de Deudas)
+                  </small>
                 </div>
               </div>
             )}

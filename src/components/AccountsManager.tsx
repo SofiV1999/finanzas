@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { toCop, useData } from '../lib/data'
-import { todayIso } from '../lib/dates'
+import { formatDay, todayIso } from '../lib/dates'
 import { formatMoney } from '../lib/format'
 import { isInUseError } from '../lib/budget'
+import { fetchTransactions } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import {
   accountTypeLabels,
@@ -19,6 +20,37 @@ type Mode = 'activos' | 'deudas'
 
 // Intereses y seguro registrados en cada préstamo (gastos cargados al préstamo con cada cuota)
 type LoanCosts = { interest: number; insurance: number; interestYear: number }
+
+// Cuántos movimientos de cada cuenta son anteriores a la fecha de su saldo inicial (no lo mueven)
+function useEarlyMovements(accounts: AccountWithBalance[]) {
+  const { version } = useData()
+  const [counts, setCounts] = useState(new Map<string, number>())
+  const opening = new Map(accounts.map((a) => [a.id, a.opening_date]))
+  const latest = accounts.reduce((max, a) => (a.opening_date > max ? a.opening_date : max), '')
+  const key = accounts.map((a) => `${a.id}:${a.opening_date}`).join(',')
+  useEffect(() => {
+    if (!latest) return
+    let cancelled = false
+    fetchTransactions(undefined, latest)
+      .then((data) => {
+        if (cancelled) return
+        const map = new Map<string, number>()
+        for (const t of data) {
+          for (const id of [t.account_id, t.to_account_id]) {
+            const date = id && opening.get(id)
+            if (date && t.date < date) map.set(id, (map.get(id) ?? 0) + 1)
+          }
+        }
+        setCounts(map)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, latest, version])
+  return counts
+}
 
 function useLoanCosts(loanIds: string[]) {
   const { categories, version } = useData()
@@ -67,6 +99,7 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
   const loanCosts = useLoanCosts(
     mode === 'deudas' ? mine.filter((a) => a.type === 'prestamo').map((a) => a.id) : [],
   )
+  const early = useEarlyMovements(mine)
   const totalCop = mine
     .filter((a) => !a.archived)
     .reduce((sum, a) => sum + toCop(a.balance, a.currency, latestTrm?.rate), 0)
@@ -114,6 +147,7 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
               key={a.id}
               account={a}
               costs={loanCosts.get(a.id)}
+              early={early.get(a.id) ?? 0}
               onClick={() => setEditing(a)}
             />
           ))}
@@ -134,10 +168,12 @@ export default function AccountsManager({ mode }: { mode: Mode }) {
 function AccountRow({
   account: a,
   costs,
+  early,
   onClick,
 }: {
   account: AccountWithBalance
   costs?: LoanCosts
+  early: number
   onClick: () => void
 }) {
   const { latestTrm } = useData()
@@ -179,6 +215,13 @@ function AccountRow({
               {formatMoney(a.original_amount!, a.currency)})
             </span>
           </>
+        )}
+        {early > 0 && (
+          <span className="muted small">
+            {early} {early === 1 ? 'movimiento' : 'movimientos'} antes del{' '}
+            {formatDay(a.opening_date)} {a.opening_date.slice(0, 4)} (fecha del saldo inicial) no
+            mueven el saldo
+          </span>
         )}
         {costs && costs.interest + costs.insurance > 0 && (
           <span className="muted small">
@@ -241,6 +284,7 @@ function AccountForm({
   const [originalAmount, setOriginalAmount] = useState(str(initial?.original_amount))
   const [minPayment, setMinPayment] = useState(str(initial?.min_payment))
   const [termMonths, setTermMonths] = useState(str(initial?.term_months))
+  const [insurance, setInsurance] = useState(str(initial?.monthly_insurance))
   const [archived, setArchived] = useState(initial?.archived ?? false)
   const [digits, setDigits] = useState((initial?.match_digits ?? []).join(', '))
   const [error, setError] = useState<string | null>(null)
@@ -279,6 +323,10 @@ function AccountForm({
       original_amount: loan ? numOrNull(originalAmount) : null,
       min_payment: debt ? numOrNull(minPayment) : null,
       term_months: loan ? numOrNull(termMonths) : null,
+      // Solo se envía si se usa, así la app funciona aunque la migración 0008 no se haya corrido
+      ...((loan && insurance) || initial?.monthly_insurance != null
+        ? { monthly_insurance: loan ? numOrNull(insurance) : null }
+        : {}),
       archived,
       // Solo se envía si se usa, así la app funciona aunque la migración 0007 no se haya corrido
       ...(digitList.length > 0 || initial?.match_digits ? { match_digits: digitList } : {}),
@@ -386,7 +434,9 @@ function AccountForm({
               value={openingDate}
               onChange={(e) => setOpeningDate(e.target.value)}
             />
-            <small className="muted">Registra movimientos desde esta fecha</small>
+            <small className="muted">
+              Lo que había al empezar ese día. Los movimientos de antes no cambian el saldo.
+            </small>
           </div>
         </div>
 
@@ -488,6 +538,21 @@ function AccountForm({
                 value={minPayment}
                 onChange={(e) => setMinPayment(e.target.value)}
               />
+              <small className="muted">Completa, con intereses y seguro</small>
+            </div>
+            <div className="field">
+              <label htmlFor="acc-insurance">Seguro mensual (opcional)</label>
+              <input
+                id="acc-insurance"
+                type="number"
+                min="0"
+                step="any"
+                value={insurance}
+                onChange={(e) => setInsurance(e.target.value)}
+              />
+              <small className="muted">
+                Seguro de vida deudor u otros cargos fijos que vienen en la cuota
+              </small>
             </div>
             <div className="field">
               <label htmlFor="acc-term">Plazo (meses)</label>

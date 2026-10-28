@@ -85,6 +85,8 @@ export type Account = {
   original_amount: number | null
   min_payment: number | null
   term_months: number | null
+  // Seguro mensual de un préstamo, incluido en la cuota
+  monthly_insurance?: number | null
   // Últimos 4 dígitos con los que el banco nombra la cuenta en sus alertas
   match_digits?: string[]
   archived: boolean
@@ -93,6 +95,11 @@ export type Account = {
 
 // Cuenta con su saldo actual (vista account_balances)
 export type AccountWithBalance = Account & { balance: number }
+
+// Cuentas para las que un movimiento de esa fecha es anterior a su saldo inicial: ya está dentro
+// de ese saldo, así que no lo cambia (sí cuenta en presupuesto y reportes)
+export const beforeOpening = <A extends Account>(date: string, ...accounts: (A | undefined)[]) =>
+  accounts.filter((a): a is A => a != null && Boolean(date) && date < a.opening_date)
 
 export type TransactionType = 'ingreso' | 'gasto' | 'traslado'
 

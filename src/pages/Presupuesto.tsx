@@ -601,9 +601,12 @@ function FiftyThirtyTwenty({
   const sum = (group: BudgetGroup, f: (c: Category) => number) =>
     expenseCats.filter((c) => c.budget_group === group).reduce((s, c) => s + f(c), 0)
   const real = (c: Category) => realByCategory.get(c.id) ?? 0
+  // Igual que el total presupuestado: los gastos anuales cuentan su provisión (1/12) cada mes
+  const planned = (c: Category) =>
+    c.frequency === 'anual' ? (c.archived ? 0 : c.default_budget / 12) : budgetFor(c)
 
   const needs = sum('necesidad', real) + loanReal
-  const needsBudget = sum('necesidad', budgetFor) + loanBudget
+  const needsBudget = sum('necesidad', planned) + loanBudget
   const wants = sum('deseo', real)
   // Ahorro = lo que queda del ingreso después de necesidades y deseos
   const savings = income - needs - wants
@@ -621,11 +624,11 @@ function FiftyThirtyTwenty({
       budget: needsBudget,
       target: settings.needs_pct,
     },
-    { label: 'Deseos', real: wants, budget: sum('deseo', budgetFor), target: settings.wants_pct },
+    { label: 'Deseos', real: wants, budget: sum('deseo', planned), target: settings.wants_pct },
     {
       label: 'Ahorro / Inversión',
       real: savings,
-      budget: income - needsBudget - sum('deseo', budgetFor),
+      budget: income - needsBudget - sum('deseo', planned),
       target: settings.savings_pct,
       isSavings: true,
     },

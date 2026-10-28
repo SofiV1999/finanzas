@@ -177,7 +177,8 @@ export type NetWorthPoint = {
 }
 
 // Patrimonio neto al cierre de cada mes entre `fromMonth` y `toMonth` (YYYY-MM). Cada cuenta
-// entra desde su fecha de saldo inicial; los saldos en USD se convierten con `usdRate`.
+// entra desde su fecha de saldo inicial y, como en su saldo, solo suma movimientos desde esa
+// fecha; los saldos en USD se convierten con `usdRate`.
 export function netWorthByMonth(
   txs: Transaction[],
   accounts: AccountWithBalance[],
@@ -188,6 +189,10 @@ export function netWorthByMonth(
   const points: NetWorthPoint[] = []
   const sorted = [...txs].sort((a, b) => a.date.localeCompare(b.date))
   const balance = new Map<string, number>()
+  const openingDate = new Map(accounts.map((a) => [a.id, a.opening_date]))
+  const add = (id: string, date: string, delta: number) => {
+    if (date >= (openingDate.get(id) ?? '')) balance.set(id, (balance.get(id) ?? 0) + delta)
+  }
   let i = 0
   let [y, m] = fromMonth.split('-').map(Number)
   const [ty, tm] = toMonth.split('-').map(Number)
@@ -196,16 +201,8 @@ export function netWorthByMonth(
     const end = `${key}-31`
     for (; i < sorted.length && sorted[i].date <= end; i++) {
       const t = sorted[i]
-      balance.set(
-        t.account_id,
-        (balance.get(t.account_id) ?? 0) + (t.type === 'ingreso' ? t.amount : -t.amount),
-      )
-      if (t.to_account_id) {
-        balance.set(
-          t.to_account_id,
-          (balance.get(t.to_account_id) ?? 0) + (t.to_amount ?? t.amount),
-        )
-      }
+      add(t.account_id, t.date, t.type === 'ingreso' ? t.amount : -t.amount)
+      if (t.to_account_id) add(t.to_account_id, t.date, t.to_amount ?? t.amount)
     }
     let assets = 0
     let debts = 0

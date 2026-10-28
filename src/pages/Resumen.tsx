@@ -7,11 +7,12 @@ import { effectiveBudget } from '../lib/budget'
 import { toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatDay, formatMonth, todayIso } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
-import { pendingConfirmations, presetFor } from '../lib/recurring'
+import { occurrenceIn, pendingConfirmations, presetFor } from '../lib/recurring'
 import {
   fetchTransactions,
   makeCop,
   monthlyTotals,
+  splitLoanPayments,
   netWorthByMonth,
   transferLabel,
 } from '../lib/reports'
@@ -63,10 +64,13 @@ export default function Resumen() {
   }
   const netWorth = netWorthByMonth(txs, accounts, addMonths(month, -11), month, latestTrm?.rate)
 
-  // Gasto real por categoría este mes
+  // Gasto real por categoría este mes. Como en Presupuesto, los intereses y el seguro de las
+  // cuotas de préstamos van con su cuota (en Pendientes), no en su categoría.
+  const monthTxs = txs.filter((t) => t.date.startsWith(month))
+  const { charges: loanCharges } = splitLoanPayments(monthTxs, accounts, cop)
   const realByCategory = new Map<string, number>()
-  for (const t of txs) {
-    if (t.type !== 'gasto' || !t.date.startsWith(month) || !t.category_id) continue
+  for (const t of monthTxs) {
+    if (t.type !== 'gasto' || !t.category_id || loanCharges.has(t)) continue
     realByCategory.set(t.category_id, (realByCategory.get(t.category_id) ?? 0) + cop(t))
   }
   const override = new Map(budgets.map((b) => [b.category_id, b.amount]))
@@ -102,19 +106,10 @@ export default function Resumen() {
     }))
     .filter((r) => r.expected > 0 && r.real < r.expected)
 
-  // Próximos pagos de tarjetas y préstamos con día de pago
+  // Próximos pagos de tarjetas y préstamos con día de pago (y los vencidos sin pagar)
   const dueSoon = accounts
     .filter((a) => isDebt(a.type) && !a.archived && a.due_day && a.balance < -0.5)
-    .map((a) => {
-      const day = String(a.due_day).padStart(2, '0')
-      const dueThisMonth = `${month}-${day}` >= today
-      const dueMonth = dueThisMonth ? month : addMonths(month, 1)
-      // Pagada si ya hubo un traslado hacia la deuda este mes
-      const paid = txs.some(
-        (t) => t.type === 'traslado' && t.to_account_id === a.id && t.date.startsWith(month),
-      )
-      return { account: a, date: `${dueMonth}-${day}`, paid: paid && dueThisMonth }
-    })
+    .map((a) => ({ account: a, ...debtDue(a.id, a.due_day!, txs, today) }))
     .sort((x, y) => x.date.localeCompare(y.date))
 
   const toConfirm = pendingConfirmations(recurring, today)
@@ -241,7 +236,7 @@ export default function Resumen() {
             toConfirm.length === 0 && (
               <p className="muted small">No tienes pagos pendientes registrados.</p>
             )}
-          {dueSoon.map(({ account: a, date, paid }) => {
+          {dueSoon.map(({ account: a, date, paid, overdue }) => {
             const days = Math.round(
               (new Date(`${date}T00:00`).getTime() - new Date(`${today}T00:00`).getTime()) /
                 86400000,
@@ -254,6 +249,11 @@ export default function Resumen() {
                 </span>
                 {paid ? (
                   <span className="tag tag-paid">Pagado</span>
+                ) : overdue ? (
+                  <span className="text-expense">
+                    {a.min_payment ? `${formatMoney(a.min_payment, a.currency)} · ` : ''}
+                    vencido hace {-days} {days === -1 ? 'día' : 'días'}
+                  </span>
                 ) : (
                   <span className={days <= 3 ? 'warning-text' : 'muted'}>
                     {a.min_payment ? `${formatMoney(a.min_payment, a.currency)} · ` : ''}
@@ -407,4 +407,27 @@ export default function Resumen() {
       {preset && <TransactionForm preset={preset} onClose={() => setPreset(null)} />}
     </>
   )
+}
+
+// Estado de la cuota de una deuda que vence cada mes en `day` (o el último día de los meses más
+// cortos). Un pago (traslado a la deuda) después de un vencimiento cubre la cuota siguiente.
+function debtDue(accountId: string, day: number, txs: Transaction[], today: string) {
+  const [y, m] = today.split('-').map(Number)
+  const due = (offset: number) => {
+    const d = new Date(y, m - 1 + offset, 1)
+    return occurrenceIn({ day_of_month: day }, d.getFullYear(), d.getMonth() + 1)
+  }
+  const [previous, current, next] = [due(-1), due(0), due(1)]
+  const paidBetween = (from: string, to: string) =>
+    txs.some(
+      (t) =>
+        t.type === 'traslado' && t.to_account_id === accountId && t.date > from && t.date <= to,
+    )
+  if (today <= current) return { date: current, paid: paidBetween(previous, today), overdue: false }
+  // Ya pasó el día de pago de este mes: si se pagó (a tiempo o tarde), se muestra la siguiente
+  if (paidBetween(previous, current)) {
+    return { date: next, paid: paidBetween(current, today), overdue: false }
+  }
+  if (paidBetween(current, today)) return { date: next, paid: false, overdue: false }
+  return { date: current, paid: false, overdue: true }
 }

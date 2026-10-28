@@ -56,6 +56,7 @@ export default function DebtPlan() {
       balance: toCop(-a.balance, a.currency, latestTrm?.rate),
       annualEa: a.annual_rate,
       minPayment: toCop(a.min_payment!, a.currency, latestTrm?.rate),
+      insurance: toCop(a.monthly_insurance ?? 0, a.currency, latestTrm?.rate),
     }))
 
   const extra = Number(extraDigits || 0)
@@ -393,7 +394,8 @@ function AmortizationModal({
 }) {
   const owed = -account.balance
   const payment = account.min_payment ?? 0
-  const { rows, neverPaysOff } = amortization(owed, account.annual_rate, payment)
+  const insurance = account.monthly_insurance ?? 0
+  const { rows, neverPaysOff } = amortization(owed, account.annual_rate, payment, insurance)
   const totalInterest = rows.reduce((s, r) => s + r.interest, 0)
   const money = (v: number) => formatMoney(v, account.currency)
 
@@ -401,6 +403,7 @@ function AmortizationModal({
     <Modal title={`Tabla de pagos · ${account.name}`} onClose={onClose}>
       <p className="muted small">
         Desde el saldo actual ({money(owed)}) pagando {money(payment)} al mes
+        {insurance > 0 && ` (${money(insurance)} de seguro, que no abona a la deuda)`}
         {account.annual_rate != null
           ? ` con ${(account.annual_rate * 100).toFixed(2)}% E.A. (${(monthlyRate(account.annual_rate) * 100).toFixed(2)}% mensual).`
           : ' sin tasa de interés registrada.'}

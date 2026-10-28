@@ -19,7 +19,7 @@ import {
 import { presetFor } from '../lib/recurring'
 import { transferLabel } from '../lib/reports'
 import { supabase } from '../lib/supabase'
-import { isDebt, type Transaction } from '../lib/types'
+import { beforeOpening, isDebt, type Transaction } from '../lib/types'
 import TransactionForm, { type SavedTransaction, type TransactionPreset } from './TransactionForm'
 
 type Reviewing = { group: ImportGroup; preset: TransactionPreset }
@@ -385,6 +385,16 @@ export default function ImportInbox() {
                 Compra en {first.currency} con una cuenta en {currency}. Crea la parte en{' '}
                 {first.currency === 'USD' ? 'dólares' : 'pesos'} de la tarjeta (otra cuenta con los
                 mismos dígitos) o escribe el valor en {currency} al revisarla.
+              </div>
+            )}
+            {preset.date && beforeOpening(preset.date, account, toAccount).length > 0 && (
+              <div className="small muted">
+                Es anterior al saldo inicial de{' '}
+                {beforeOpening(preset.date, account, toAccount)
+                  .map((a) => a.name)
+                  .join(' y ')}
+                : ya está incluido en ese saldo. Apruébala solo si quieres que cuente en el
+                presupuesto; no cambia el saldo.
               </div>
             )}
             {ask && (

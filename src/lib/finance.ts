@@ -17,16 +17,22 @@ export type AmortizationRow = {
   closing: number
 }
 
-// Tabla de pagos con cuota fija desde el saldo actual. Se detiene si la cuota no cubre
-// los intereses (la deuda nunca bajaría).
-export function amortization(balance: number, annualEa: number | null, payment: number) {
+// Tabla de pagos con cuota fija desde el saldo actual. El seguro mensual sale de la cuota sin
+// abonar a la deuda. Se detiene si la cuota no cubre los intereses (la deuda nunca bajaría).
+export function amortization(
+  balance: number,
+  annualEa: number | null,
+  payment: number,
+  insurance = 0,
+) {
   const r = monthlyRate(annualEa)
   const rows: AmortizationRow[] = []
+  const available = payment - insurance
   let bal = balance
   while (bal > 0.5 && rows.length < MAX_MONTHS) {
     const interest = bal * r
-    if (payment <= interest) return { rows, neverPaysOff: true }
-    const pay = Math.min(payment, bal + interest)
+    if (available <= interest) return { rows, neverPaysOff: true }
+    const pay = Math.min(available, bal + interest)
     const closing = bal + interest - pay
     rows.push({
       month: rows.length + 1,
@@ -48,7 +54,10 @@ export type DebtInput = {
   name: string
   balance: number
   annualEa: number | null
+  // Cuota o pago mínimo completo, incluido el seguro
   minPayment: number
+  // Seguro mensual dentro de la cuota: se paga pero no abona a la deuda
+  insurance?: number
 }
 
 export type StrategyResult = {
@@ -100,15 +109,16 @@ export function simulate(debts: DebtInput[], strategy: Strategy, extra: number):
       totalInterest += interest
       bal.set(d.id, b + interest)
     }
-    // 2. Pagos mínimos
+    // 2. Pagos mínimos (el seguro sale de la cuota sin abonar a la deuda)
     let available = budget
     for (const d of debts) {
       const b = bal.get(d.id)!
       if (b <= 0.5) continue
-      const pay = Math.min(d.minPayment, b)
+      const insurance = Math.min(d.insurance ?? 0, d.minPayment)
+      const pay = Math.min(d.minPayment - insurance, b)
       bal.set(d.id, b - pay)
-      totalPaid += pay
-      available -= pay
+      totalPaid += pay + insurance
+      available -= pay + insurance
     }
     // 3. Lo que sobra va a la deuda prioritaria
     if (strategy !== 'minimos') {
