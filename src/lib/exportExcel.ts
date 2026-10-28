@@ -1,6 +1,6 @@
 import { toCop } from './data'
 import { MONTH_NAMES } from './budget'
-import { fetchTransactions, makeCop, makeLoanInstallment, transferLabel } from './reports'
+import { fetchTransactions, makeCop, loanPrincipals, transferLabel } from './reports'
 import { supabase } from './supabase'
 import {
   accountTypeLabels,
@@ -55,7 +55,7 @@ export async function exportToExcel(
   const accountById = new Map(accounts.map((a) => [a.id, a]))
   const categoryById = new Map(categories.map((c) => [c.id, c]))
   const cop = makeCop(accounts, usdRate)
-  const isInstallment = makeLoanInstallment(accounts)
+  const principals = loanPrincipals(txs, accounts, cop)
 
   // ---- Movimientos (más recientes primero)
   const movements: SheetData = [
@@ -101,12 +101,12 @@ export async function exportToExcel(
     { income: number; expenses: number; needs: number; wants: number }
   >()
   for (const t of txs) {
-    if (t.type === 'traslado' && !isInstallment(t)) continue
+    if (t.type === 'traslado' && !principals.has(t)) continue
     const key = t.date.slice(0, 7)
     const m = months.get(key) ?? { income: 0, expenses: 0, needs: 0, wants: 0 }
     const value = cop(t)
-    // Cuota de préstamo (capital): necesidad, pero no es un gasto nuevo
-    if (t.type === 'traslado') m.needs += value
+    // Capital de una cuota de préstamo: necesidad, pero no es un gasto nuevo
+    if (t.type === 'traslado') m.needs += principals.get(t) ?? 0
     else if (t.type === 'ingreso') m.income += value
     else {
       m.expenses += value

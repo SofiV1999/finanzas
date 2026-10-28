@@ -236,7 +236,8 @@ function TransactionFormInner({
           day_of_month: Number(date.slice(8, 10)),
           start_date: date,
           end_date: repeatEnd || null,
-          auto: repeatAuto,
+          // Las cuotas de préstamo siempre se confirman: cada mes cambian los intereses
+          auto: repeatAuto && !loanPayment,
           last_done: date <= today ? date : null,
         })
         .select('id')
@@ -278,8 +279,30 @@ function TransactionFormInner({
   }
 
   async function handleDelete() {
-    if (!initial || !confirm('¿Eliminar este movimiento? No se puede deshacer.')) return
-    const { error } = await supabase.from('transactions').delete().eq('id', initial.id)
+    if (!initial) return
+    // Una cuota de préstamo tiene sus intereses y seguro cargados al préstamo ese día: si quedaran
+    // solos, la deuda subiría por ellos sin el pago que los cubre
+    const loan = accounts.find((a) => a.id === initial.to_account_id && a.type === 'prestamo')
+    let charges: { id: string; amount: number }[] = []
+    if (initial.type === 'traslado' && loan) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, amount, description')
+        .eq('type', 'gasto')
+        .eq('account_id', loan.id)
+        .eq('date', initial.date)
+      if (error) return setError(error.message)
+      charges = data.filter((t) => /^(Intereses|Seguro)\b/.test(t.description ?? ''))
+    }
+    const total = charges.reduce((s, t) => s + Number(t.amount), 0)
+    const message = charges.length
+      ? `¿Eliminar esta cuota y sus intereses y seguro (${formatMoney(total)})? No se puede deshacer.`
+      : '¿Eliminar este movimiento? No se puede deshacer.'
+    if (!confirm(message)) return
+    const { error } = await supabase
+      .from('transactions')
+      .delete()
+      .in('id', [initial.id, ...charges.map((t) => t.id)])
     if (error) return setError(error.message)
     await refresh()
     onClose()
@@ -492,6 +515,13 @@ function TransactionFormInner({
           </div>
         )}
 
+        {initial && isTransfer && toAccount?.type === 'prestamo' && (
+          <p className="small muted">
+            Si esta cuota tiene intereses o seguro, están registrados aparte como gastos del
+            préstamo ese mismo día. Si cambias el monto, revísalos también.
+          </p>
+        )}
+
         {needsFx && (
           <div className="field">
             <label htmlFor="tx-fx">TRM (COP por 1 USD)</label>
@@ -554,26 +584,33 @@ function TransactionFormInner({
             </label>
             {repeat && (
               <>
-                <div className="segmented segmented-inline repeat-mode" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={repeatAuto}
-                    className={`segment${repeatAuto ? ' active' : ''}`}
-                    onClick={() => setRepeatAuto(true)}
-                  >
-                    Registrar automáticamente
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={!repeatAuto}
-                    className={`segment${!repeatAuto ? ' active' : ''}`}
-                    onClick={() => setRepeatAuto(false)}
-                  >
-                    Pedirme confirmación
-                  </button>
-                </div>
+                {loanPayment ? (
+                  <small className="muted">
+                    Cada mes aparece como pendiente para que confirmes la cuota y sus intereses, que
+                    cambian mes a mes.
+                  </small>
+                ) : (
+                  <div className="segmented segmented-inline repeat-mode" role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={repeatAuto}
+                      className={`segment${repeatAuto ? ' active' : ''}`}
+                      onClick={() => setRepeatAuto(true)}
+                    >
+                      Registrar automáticamente
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={!repeatAuto}
+                      className={`segment${!repeatAuto ? ' active' : ''}`}
+                      onClick={() => setRepeatAuto(false)}
+                    >
+                      Pedirme confirmación
+                    </button>
+                  </div>
+                )}
                 <div className="field repeat-end">
                   <label htmlFor="tx-repeat-end">Hasta (opcional)</label>
                   <input
@@ -584,18 +621,17 @@ function TransactionFormInner({
                     onChange={(e) => setRepeatEnd(e.target.value)}
                   />
                 </div>
-                <small className="muted">
-                  {repeatAuto
-                    ? 'Se registra solo en su fecha (al abrir la app), con el mismo monto.'
-                    : 'En su fecha aparece como pendiente para que confirmes o ajustes el monto.'}
-                  {date > todayIso() &&
-                    (repeatAuto
-                      ? ' Como la fecha es futura, el primero se registrará ese día.'
-                      : ' Como la fecha es futura, el primero aparecerá como pendiente ese día.')}
-                  {loanPayment &&
-                    repeatAuto &&
-                    ' Para cuotas de préstamo te recomiendo “Pedirme confirmación”: así cada mes se separan los intereses.'}
-                </small>
+                {!loanPayment && (
+                  <small className="muted">
+                    {repeatAuto
+                      ? 'Se registra solo en su fecha (al abrir la app), con el mismo monto.'
+                      : 'En su fecha aparece como pendiente para que confirmes o ajustes el monto.'}
+                    {date > todayIso() &&
+                      (repeatAuto
+                        ? ' Como la fecha es futura, el primero se registrará ese día.'
+                        : ' Como la fecha es futura, el primero aparecerá como pendiente ese día.')}
+                  </small>
+                )}
               </>
             )}
           </div>

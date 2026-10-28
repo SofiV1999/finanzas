@@ -4,7 +4,7 @@ import { MONTH_NAMES, annualProvision, effectiveBudget } from '../lib/budget'
 import { plannedIncomeCop, toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
-import { makeLoanInstallment } from '../lib/reports'
+import { loanPrincipals } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import {
   budgetGroupLabels,
@@ -18,6 +18,7 @@ type EditMode = 'mes' | 'plantilla'
 type IncomeBase = 'planeado' | 'real'
 
 type Movement = {
+  date: string
   type: 'ingreso' | 'gasto' | 'traslado'
   category_id: string | null
   amount: number
@@ -46,7 +47,7 @@ export default function Presupuesto() {
       supabase.from('budgets').select('*').eq('month', monthStart),
       supabase
         .from('transactions')
-        .select('type, category_id, amount, fx_rate, account_id, to_account_id, description')
+        .select('date, type, category_id, amount, fx_rate, account_id, to_account_id, description')
         .gte('date', monthStart)
         .lte('date', monthEnd(month)),
     ]).then(([b, t]) => {
@@ -64,21 +65,15 @@ export default function Presupuesto() {
 
   // Real del mes por categoría, en pesos, y lo pagado en cuotas de préstamos (capital)
   const [realByCategory, loanInstallments] = useMemo(() => {
-    const isInstallment = makeLoanInstallment(accounts)
+    const cop = (m: Movement) =>
+      toCop(m.amount, currencyOf.get(m.account_id) ?? 'COP', m.fx_rate ?? latestTrm?.rate)
     const map = new Map<string, number>()
-    let loans = 0
     for (const m of movements) {
-      const cop = toCop(
-        m.amount,
-        currencyOf.get(m.account_id) ?? 'COP',
-        m.fx_rate ?? latestTrm?.rate,
-      )
-      if (m.type === 'traslado') {
-        if (isInstallment(m)) loans += cop
-      } else if (m.category_id) {
-        map.set(m.category_id, (map.get(m.category_id) ?? 0) + cop)
+      if (m.type !== 'traslado' && m.category_id) {
+        map.set(m.category_id, (map.get(m.category_id) ?? 0) + cop(m))
       }
     }
+    const loans = [...loanPrincipals(movements, accounts, cop).values()].reduce((s, v) => s + v, 0)
     return [map, loans] as const
   }, [movements, accounts, currencyOf, latestTrm])
 

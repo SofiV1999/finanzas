@@ -59,14 +59,38 @@ export type MonthTotals = {
 
 export const EXTRA_PAYMENT = 'Abono extra a capital'
 
-// La cuota de un préstamo es una necesidad: el capital es un traslado al préstamo (los intereses
-// ya son gasto). Los abonos extra a capital sí cuentan como ahorro.
-export function makeLoanInstallment(accounts: AccountWithBalance[]) {
+type LoanMovement = Pick<
+  Transaction,
+  'date' | 'type' | 'account_id' | 'to_account_id' | 'description' | 'amount'
+>
+
+// Capital pagado en cada cuota de préstamo, que cuenta como necesidad. La cuota completa es un
+// traslado al préstamo y sus intereses y seguro se cargan al préstamo como gasto el mismo día
+// (ya son necesidad por su categoría), así que el capital es la cuota menos esos cargos. Los
+// abonos extra a capital no son cuota: cuentan como ahorro.
+export function loanPrincipals<T extends LoanMovement>(
+  txs: T[],
+  accounts: AccountWithBalance[],
+  cop: (t: T) => number,
+): Map<T, number> {
   const loans = new Set(accounts.filter((a) => a.type === 'prestamo').map((a) => a.id))
-  return (t: Pick<Transaction, 'type' | 'to_account_id' | 'description'>) =>
-    t.type === 'traslado' &&
-    loans.has(t.to_account_id ?? '') &&
-    t.description?.trim() !== EXTRA_PAYMENT
+  const charges = new Map<string, number>()
+  for (const t of txs) {
+    if (t.type !== 'gasto' || !loans.has(t.account_id)) continue
+    const key = `${t.account_id}|${t.date}`
+    charges.set(key, (charges.get(key) ?? 0) + cop(t))
+  }
+  const principals = new Map<T, number>()
+  for (const t of txs) {
+    if (t.type !== 'traslado' || !loans.has(t.to_account_id ?? '')) continue
+    if (t.description?.trim() === EXTRA_PAYMENT) continue
+    const key = `${t.to_account_id}|${t.date}`
+    const value = cop(t)
+    const charged = Math.min(value, charges.get(key) ?? 0)
+    charges.set(key, (charges.get(key) ?? 0) - charged)
+    principals.set(t, value - charged)
+  }
+  return principals
 }
 
 // Convierte el monto de un movimiento a pesos con la TRM con la que se registró
@@ -83,7 +107,7 @@ export function monthlyTotals(
   cop: (t: Transaction) => number,
   accounts: AccountWithBalance[],
 ): MonthTotals[] {
-  const isInstallment = makeLoanInstallment(accounts)
+  const principals = loanPrincipals(txs, accounts, cop)
   const group = new Map(categories.map((c) => [c.id, c.budget_group]))
   const months = MONTHS_SHORT.map((label, i) => ({
     month: i + 1,
@@ -97,11 +121,13 @@ export function monthlyTotals(
   for (const t of txs) {
     if (Number(t.date.slice(0, 4)) !== year) continue
     const m = months[Number(t.date.slice(5, 7)) - 1]
-    const value = cop(t)
     if (t.type === 'traslado') {
       // No es gasto nuevo (no suma a gastos), pero sale del ingreso como necesidad
-      if (isInstallment(t)) m.needs += value
-    } else if (t.type === 'ingreso') {
+      m.needs += principals.get(t) ?? 0
+      continue
+    }
+    const value = cop(t)
+    if (t.type === 'ingreso') {
       m.income += value
     } else {
       m.expenses += value
