@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import ExportButton from '../components/ExportButton'
+import GmailImportCard from '../components/GmailImportCard'
 import RemindersCard from '../components/RemindersCard'
 import { MONTH_NAMES, isInUseError } from '../lib/budget'
 import { todayIso } from '../lib/dates'
@@ -41,6 +42,7 @@ export default function Configuracion() {
           categories={categories.filter((c) => c.kind === 'ingreso')}
           onChange={refresh}
         />
+        <GmailImportCard />
         <RemindersCard />
         <div className="card">
           <h2>📊 Exportar a Excel</h2>

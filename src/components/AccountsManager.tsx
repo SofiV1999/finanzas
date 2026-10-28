@@ -180,6 +180,7 @@ function AccountForm({
   const [minPayment, setMinPayment] = useState(str(initial?.min_payment))
   const [termMonths, setTermMonths] = useState(str(initial?.term_months))
   const [archived, setArchived] = useState(initial?.archived ?? false)
+  const [digits, setDigits] = useState((initial?.match_digits ?? []).join(', '))
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -191,6 +192,18 @@ function AccountForm({
     e.preventDefault()
     setError(null)
     const openingValue = Number(opening || 0)
+    // De cada número escrito se toman los últimos 4 dígitos
+    const digitList = [
+      ...new Set(
+        digits
+          .split(/\D+/)
+          .filter((d) => d.length >= 4)
+          .map((d) => d.slice(-4)),
+      ),
+    ]
+    if (digits.trim() && digitList.length === 0) {
+      return setError('Escribe los últimos 4 dígitos, p. ej. 1234 o 1234, 5678.')
+    }
     const row = {
       name: name.trim(),
       type,
@@ -205,6 +218,8 @@ function AccountForm({
       min_payment: debt ? numOrNull(minPayment) : null,
       term_months: loan ? numOrNull(termMonths) : null,
       archived,
+      // Solo se envía si se usa, así la app funciona aunque la migración 0007 no se haya corrido
+      ...(digitList.length > 0 || initial?.match_digits ? { match_digits: digitList } : {}),
       sort_order: initial?.sort_order ?? Math.max(0, ...accounts.map((a) => a.sort_order)) + 1,
     }
     setSaving(true)
@@ -424,6 +439,21 @@ function AccountForm({
             </div>
           </div>
         )}
+
+        <div className="field">
+          <label htmlFor="acc-digits">Últimos 4 dígitos (opcional)</label>
+          <input
+            id="acc-digits"
+            inputMode="numeric"
+            placeholder={card ? 'Ej. 9012' : 'Ej. 1234, 5678'}
+            value={digits}
+            onChange={(e) => setDigits(e.target.value)}
+          />
+          <small className="muted">
+            Con los que el banco la nombra en sus alertas: número de cuenta, tarjeta débito o
+            tarjeta de crédito. Separa varios con coma.
+          </small>
+        </div>
 
         {initial && (
           <label className="muted small check-line">

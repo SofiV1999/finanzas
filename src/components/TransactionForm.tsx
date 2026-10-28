@@ -54,10 +54,14 @@ export type TransactionPreset = {
   recurring?: { id: string; date: string }
 }
 
+// Movimiento recién creado, para quien abrió el formulario (p. ej. aprobar una alerta)
+export type SavedTransaction = Omit<Transaction, 'id'> & { id: string }
+
 type FormProps = {
   initial?: Transaction
   preset?: TransactionPreset
   onClose: () => void
+  onSaved?: (saved: SavedTransaction) => Promise<void>
 }
 
 // "Duplicar" cambia el formulario de edición por uno nuevo con los mismos datos
@@ -73,6 +77,7 @@ function TransactionFormInner({
   initial,
   preset,
   onClose,
+  onSaved,
   onDuplicate,
 }: FormProps & { onDuplicate?: (preset: TransactionPreset) => void }) {
   const { accounts, categories, refresh } = useData()
@@ -249,11 +254,15 @@ function TransactionFormInner({
       link = { recurring_id: rule.id, recurring_date: date }
     }
 
-    const { error } = initial
-      ? await supabase.from('transactions').update(row).eq('id', initial.id)
-      : await supabase.from('transactions').insert([{ ...row, ...link }, ...loanCharges])
+    const { data: inserted, error } = initial
+      ? await supabase.from('transactions').update(row).eq('id', initial.id).select('id')
+      : await supabase
+          .from('transactions')
+          .insert([{ ...row, ...link }, ...loanCharges])
+          .select('id')
     setSaving(false)
     if (error) return setError(error.message)
+    if (!initial && onSaved && inserted?.[0]) await onSaved({ ...row, id: inserted[0].id })
 
     // Al confirmar un pendiente, el programado avanza hasta esa fecha
     if (preset?.recurring) {

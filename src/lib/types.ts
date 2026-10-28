@@ -85,6 +85,8 @@ export type Account = {
   original_amount: number | null
   min_payment: number | null
   term_months: number | null
+  // Últimos 4 dígitos con los que el banco nombra la cuenta en sus alertas
+  match_digits?: string[]
   archived: boolean
   sort_order: number
 }

@@ -9,7 +9,8 @@ Página: https://sofiv1999.github.io/finanzas/
 ## Secciones
 
 - **Resumen:** patrimonio neto, el mes actual, pendientes del mes, metas y últimos movimientos.
-- **Movimientos:** registro de ingresos, gastos y traslados (COP y USD con TRM oficial).
+- **Movimientos:** registro de ingresos, gastos y traslados (COP y USD con TRM oficial), y
+  bandeja "Por revisar" con las alertas de los bancos importadas desde Gmail.
 - **Presupuesto:** plantilla mensual con ajustes por mes, ingresos esperados, gastos fijos
   y anuales (con provisión), y 50/30/20.
 - **Deudas:** tarjetas y préstamos, división interés/capital de cada cuota, plan bola de
@@ -17,6 +18,18 @@ Página: https://sofiv1999.github.io/finanzas/
 - **Ahorros y metas:** cuentas y metas con aporte mensual necesario.
 - **Reportes:** gráficas por mes y año.
 - **Configuración:** salario, TRM de planeación, metas 50/30/20, categorías e instalación.
+
+## Importar desde Gmail
+
+`gmail/importador.gs` es un Google Apps Script que corre en la cuenta de Gmail: cada 10
+minutos lee las alertas de Bancolombia, Davivienda, ARQ y Nu, extrae monto, fecha, cuenta
+(últimos 4 dígitos) y comercio, y los envía a la función `ingest_bank_emails`. Esa función
+solo acepta una llave propia (en la base se guarda su sha256) y solo puede agregar alertas
+pendientes. En la app, cada alerta se aprueba, se edita o se descarta; las clasificaciones
+se recuerdan por comercio, persona, cuenta o llave.
+
+El script se copia ya configurado desde Configuración → Importar desde Gmail. Pruebas del
+lector: `node gmail/importador.test.cjs`.
 
 ## Tecnología
 

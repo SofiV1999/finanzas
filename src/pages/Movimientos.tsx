@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ImportInbox from '../components/ImportInbox'
 import RecurringManager from '../components/RecurringManager'
 import TransactionForm from '../components/TransactionForm'
 import { toCop, useData } from '../lib/data'
@@ -83,6 +84,7 @@ export default function Movimientos() {
       <h1>🧾 Movimientos</h1>
       <p className="muted">Ingresos, gastos, pagos y traslados.</p>
 
+      <ImportInbox />
       <RecurringManager />
 
       <div className="card filters">

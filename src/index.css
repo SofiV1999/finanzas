@@ -1389,3 +1389,72 @@ select.inline-input {
 .recurring-list .archived {
   opacity: 0.55;
 }
+
+.btn-small {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.import-card {
+  margin-top: 1rem;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.import-card > .row h2 {
+  margin: 0;
+}
+
+.import-tag {
+  margin-left: 0.4rem;
+}
+
+.import-summary {
+  margin-top: 0.3rem;
+  color: var(--text);
+  font-style: italic;
+}
+
+.import-assign {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.import-assign select {
+  width: auto;
+  max-width: 100%;
+}
+
+.import-row .warning-text {
+  margin-top: 0.3rem;
+}
+
+.import-actions {
+  margin-top: 0.4rem;
+  gap: 0.5rem;
+}
+
+.rule-main {
+  margin: 0;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.rule-main .inline-input {
+  min-width: 0;
+  width: 12rem;
+}
+
+.script-fallback {
+  width: 100%;
+  min-height: 8rem;
+  margin-top: 0.5rem;
+  font: 12px/1.4 ui-monospace, monospace;
+}
+
+.import-more {
+  margin-top: 0.5rem;
+}
