@@ -64,33 +64,40 @@ type LoanMovement = Pick<
   'date' | 'type' | 'account_id' | 'to_account_id' | 'description' | 'amount'
 >
 
-// Capital pagado en cada cuota de préstamo, que cuenta como necesidad. La cuota completa es un
-// traslado al préstamo y sus intereses y seguro se cargan al préstamo como gasto el mismo día
-// (ya son necesidad por su categoría), así que el capital es la cuota menos esos cargos. Los
-// abonos extra a capital no son cuota: cuentan como ahorro.
-export function loanPrincipals<T extends LoanMovement>(
+// Cuotas de préstamos, que cuentan como necesidad. La cuota completa es un traslado al préstamo y
+// sus intereses y seguro se cargan al préstamo como gasto el mismo día (ya son necesidad por su
+// categoría), así que su capital es la cuota menos esos cargos. Devuelve el capital de cada cuota
+// y los cargos que le corresponden. Los abonos extra a capital no son cuota: cuentan como ahorro.
+export function splitLoanPayments<T extends LoanMovement>(
   txs: T[],
   accounts: AccountWithBalance[],
   cop: (t: T) => number,
-): Map<T, number> {
+) {
   const loans = new Set(accounts.filter((a) => a.type === 'prestamo').map((a) => a.id))
-  const charges = new Map<string, number>()
+  const installments = txs.filter(
+    (t) =>
+      t.type === 'traslado' &&
+      loans.has(t.to_account_id ?? '') &&
+      t.description?.trim() !== EXTRA_PAYMENT,
+  )
+  const paidDays = new Set(installments.map((t) => `${t.to_account_id}|${t.date}`))
+  const charges = new Set<T>()
+  const chargedByDay = new Map<string, number>()
   for (const t of txs) {
-    if (t.type !== 'gasto' || !loans.has(t.account_id)) continue
     const key = `${t.account_id}|${t.date}`
-    charges.set(key, (charges.get(key) ?? 0) + cop(t))
+    if (t.type !== 'gasto' || !loans.has(t.account_id) || !paidDays.has(key)) continue
+    charges.add(t)
+    chargedByDay.set(key, (chargedByDay.get(key) ?? 0) + cop(t))
   }
   const principals = new Map<T, number>()
-  for (const t of txs) {
-    if (t.type !== 'traslado' || !loans.has(t.to_account_id ?? '')) continue
-    if (t.description?.trim() === EXTRA_PAYMENT) continue
+  for (const t of installments) {
     const key = `${t.to_account_id}|${t.date}`
     const value = cop(t)
-    const charged = Math.min(value, charges.get(key) ?? 0)
-    charges.set(key, (charges.get(key) ?? 0) - charged)
+    const charged = Math.min(value, chargedByDay.get(key) ?? 0)
+    chargedByDay.set(key, (chargedByDay.get(key) ?? 0) - charged)
     principals.set(t, value - charged)
   }
-  return principals
+  return { principals, charges }
 }
 
 // Convierte el monto de un movimiento a pesos con la TRM con la que se registró
@@ -107,7 +114,7 @@ export function monthlyTotals(
   cop: (t: Transaction) => number,
   accounts: AccountWithBalance[],
 ): MonthTotals[] {
-  const principals = loanPrincipals(txs, accounts, cop)
+  const { principals } = splitLoanPayments(txs, accounts, cop)
   const group = new Map(categories.map((c) => [c.id, c.budget_group]))
   const months = MONTHS_SHORT.map((label, i) => ({
     month: i + 1,

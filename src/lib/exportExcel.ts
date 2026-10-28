@@ -1,6 +1,6 @@
 import { toCop } from './data'
 import { MONTH_NAMES } from './budget'
-import { fetchTransactions, makeCop, loanPrincipals, transferLabel } from './reports'
+import { fetchTransactions, makeCop, splitLoanPayments, transferLabel } from './reports'
 import { supabase } from './supabase'
 import {
   accountTypeLabels,
@@ -55,7 +55,7 @@ export async function exportToExcel(
   const accountById = new Map(accounts.map((a) => [a.id, a]))
   const categoryById = new Map(categories.map((c) => [c.id, c]))
   const cop = makeCop(accounts, usdRate)
-  const principals = loanPrincipals(txs, accounts, cop)
+  const { principals } = splitLoanPayments(txs, accounts, cop)
 
   // ---- Movimientos (más recientes primero)
   const movements: SheetData = [

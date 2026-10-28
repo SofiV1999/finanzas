@@ -4,11 +4,12 @@ import { MONTH_NAMES, annualProvision, effectiveBudget } from '../lib/budget'
 import { plannedIncomeCop, toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatMonth, monthEnd } from '../lib/dates'
 import { formatMoney, formatPct } from '../lib/format'
-import { loanPrincipals } from '../lib/reports'
+import { splitLoanPayments } from '../lib/reports'
 import { supabase } from '../lib/supabase'
 import {
   budgetGroupLabels,
   sortByGroup,
+  type AccountWithBalance,
   type Budget,
   type BudgetGroup,
   type Category,
@@ -63,19 +64,30 @@ export default function Presupuesto() {
 
   const currencyOf = useMemo(() => new Map(accounts.map((a) => [a.id, a.currency])), [accounts])
 
-  // Real del mes por categoría, en pesos, y lo pagado en cuotas de préstamos (capital)
-  const [realByCategory, loanInstallments] = useMemo(() => {
+  // Real del mes por categoría y lo pagado en cuotas de cada préstamo, en pesos. La cuota completa
+  // va en su préstamo, así que sus intereses y seguro no se cuentan otra vez en su categoría.
+  const [realByCategory, paidByLoan] = useMemo(() => {
     const cop = (m: Movement) =>
       toCop(m.amount, currencyOf.get(m.account_id) ?? 'COP', m.fx_rate ?? latestTrm?.rate)
+    const { principals, charges } = splitLoanPayments(movements, accounts, cop)
     const map = new Map<string, number>()
+    const loans = new Map<string, number>()
     for (const m of movements) {
-      if (m.type !== 'traslado' && m.category_id) {
+      if (principals.has(m) && m.to_account_id) {
+        loans.set(m.to_account_id, (loans.get(m.to_account_id) ?? 0) + cop(m))
+      } else if (m.type !== 'traslado' && m.category_id && !charges.has(m)) {
         map.set(m.category_id, (map.get(m.category_id) ?? 0) + cop(m))
       }
     }
-    const loans = [...loanPrincipals(movements, accounts, cop).values()].reduce((s, v) => s + v, 0)
     return [map, loans] as const
   }, [movements, accounts, currencyOf, latestTrm])
+
+  // Préstamos con saldo, o pagados este mes; su presupuesto es la cuota mensual de Deudas
+  const loans = accounts.filter(
+    (a) => a.type === 'prestamo' && ((!a.archived && a.balance < -0.5) || paidByLoan.has(a.id)),
+  )
+  const loanBudget = loans.reduce((s, a) => s + (a.min_payment ?? 0), 0)
+  const loanReal = [...paidByLoan.values()].reduce((s, v) => s + v, 0)
 
   const overrideByCategory = new Map(budgets.map((b) => [b.category_id, b.amount]))
   const budgetFor = (c: Category) => effectiveBudget(c, month, overrideByCategory.get(c.id))
@@ -103,8 +115,9 @@ export default function Presupuesto() {
   const provision = annualProvision(categories)
   const totalBudget =
     expenseCats.filter((c) => c.frequency !== 'anual').reduce((s, c) => s + budgetFor(c), 0) +
-    provision
-  const totalReal = expenseCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0)
+    provision +
+    loanBudget
+  const totalReal = expenseCats.reduce((s, c) => s + (realByCategory.get(c.id) ?? 0), 0) + loanReal
 
   async function saveBudget(c: Category, value: number) {
     const { error } =
@@ -189,7 +202,7 @@ export default function Presupuesto() {
           </span>
         </div>
         <div className="card stat">
-          <span className="muted small">Presupuestado en gastos</span>
+          <span className="muted small">Presupuestado en gastos y cuotas</span>
           <strong>{formatMoney(totalBudget)}</strong>
           {provision > 0 && (
             <span className="muted small">
@@ -203,7 +216,7 @@ export default function Presupuesto() {
           </span>
         </div>
         <div className="card stat">
-          <span className="muted small">Gastado este mes</span>
+          <span className="muted small">Gastado y pagado este mes</span>
           <strong className={totalReal > totalBudget ? 'text-expense' : undefined}>
             {formatMoney(totalReal)}
           </strong>
@@ -214,7 +227,8 @@ export default function Presupuesto() {
       <FiftyThirtyTwenty
         expenseCats={expenseCats}
         realByCategory={realByCategory}
-        loanInstallments={loanInstallments}
+        loanReal={loanReal}
+        loanBudget={loanBudget}
         budgetFor={budgetFor}
         income={base === 'real' ? realIncome : planned}
         base={base}
@@ -282,6 +296,21 @@ export default function Presupuesto() {
         {fixed.map((c) => (
           <BudgetRow key={c.id} category={c} {...rowProps} onPay={() => payPreset(c)} />
         ))}
+        {loans.length > 0 && (
+          <>
+            <h3 className="budget-subtitle">Cuotas de préstamos</h3>
+            {loans.map((a) => (
+              <LoanRow
+                key={a.id}
+                loan={a}
+                paid={paidByLoan.get(a.id) ?? 0}
+                onPay={(amount) =>
+                  setPreset({ type: 'traslado', toAccountId: a.id, amount: amount || undefined })
+                }
+              />
+            ))}
+          </>
+        )}
         <h3 className="budget-subtitle">Gastos variables</h3>
         {variable.map((c) => (
           <BudgetRow key={c.id} category={c} {...rowProps} onPay={() => payPreset(c)} />
@@ -364,6 +393,58 @@ function IncomeRow({
       <div className="budget-foot muted small">
         <span>Recibido {formatMoney(real)}</span>
         {salary && <span>Esperado según Ajustes (salario × TRM de planeación)</span>}
+      </div>
+    </div>
+  )
+}
+
+// Cuota de un préstamo: se presupuesta con la cuota mensual de Deudas y lo pagado es la cuota
+// completa (capital, intereses y seguro)
+function LoanRow({
+  loan,
+  paid,
+  onPay,
+}: {
+  loan: AccountWithBalance
+  paid: number
+  onPay: (amount: number) => void
+}) {
+  const value = loan.min_payment ?? 0
+  const ratio = value > 0 ? paid / value : paid > 0 ? 1 : 0
+  return (
+    <div className="budget-row">
+      <div className="budget-head">
+        <div className="budget-name">
+          <strong>Cuota {loan.name}</strong>
+          <span className="tag tag-necesidad">{budgetGroupLabels.necesidad}</span>
+          {paid > 0 && paid >= value - 0.5 ? (
+            <span className="tag tag-paid">Pagado</span>
+          ) : paid > 0 ? (
+            <button className="tag tag-pending" onClick={() => onPay(value - paid)}>
+              Parcial · faltan {formatMoney(value - paid)}
+            </button>
+          ) : (
+            <button className="tag tag-pending" onClick={() => onPay(value)}>
+              Pendiente · registrar pago
+            </button>
+          )}
+        </div>
+        <div className="budget-input">
+          <span className="muted small static-amount" title="Se cambia en Deudas">
+            {formatMoney(value)}
+          </span>
+        </div>
+      </div>
+      <div className="meter budget-meter">
+        <div className="meter-fill" style={{ width: `${Math.min(100, ratio * 100)}%` }} />
+      </div>
+      <div className="budget-foot muted small">
+        <span>Pagado {formatMoney(paid)}</span>
+        <span>
+          {loan.min_payment
+            ? 'Cuota mensual según Deudas (incluye intereses)'
+            : 'Agrega la cuota mensual del préstamo en Deudas'}
+        </span>
       </div>
     </div>
   )
@@ -495,7 +576,8 @@ function BudgetInput({ value, onSave }: { value: number; onSave: (v: number) => 
 function FiftyThirtyTwenty({
   expenseCats,
   realByCategory,
-  loanInstallments,
+  loanReal,
+  loanBudget,
   budgetFor,
   income,
   base,
@@ -504,8 +586,9 @@ function FiftyThirtyTwenty({
 }: {
   expenseCats: Category[]
   realByCategory: Map<string, number>
-  // Capital de las cuotas de préstamos del mes: es necesidad aunque sea un traslado
-  loanInstallments: number
+  // Cuotas de préstamos del mes (pagado y presupuestado): son necesidad aunque sean traslados
+  loanReal: number
+  loanBudget: number
   budgetFor: (c: Category) => number
   income: number
   base: IncomeBase
@@ -519,7 +602,8 @@ function FiftyThirtyTwenty({
     expenseCats.filter((c) => c.budget_group === group).reduce((s, c) => s + f(c), 0)
   const real = (c: Category) => realByCategory.get(c.id) ?? 0
 
-  const needs = sum('necesidad', real) + loanInstallments
+  const needs = sum('necesidad', real) + loanReal
+  const needsBudget = sum('necesidad', budgetFor) + loanBudget
   const wants = sum('deseo', real)
   // Ahorro = lo que queda del ingreso después de necesidades y deseos
   const savings = income - needs - wants
@@ -534,14 +618,14 @@ function FiftyThirtyTwenty({
     {
       label: 'Necesidades',
       real: needs,
-      budget: sum('necesidad', budgetFor),
+      budget: needsBudget,
       target: settings.needs_pct,
     },
     { label: 'Deseos', real: wants, budget: sum('deseo', budgetFor), target: settings.wants_pct },
     {
       label: 'Ahorro / Inversión',
       real: savings,
-      budget: income - sum('necesidad', budgetFor) - sum('deseo', budgetFor),
+      budget: income - needsBudget - sum('deseo', budgetFor),
       target: settings.savings_pct,
       isSavings: true,
     },
@@ -593,8 +677,8 @@ function FiftyThirtyTwenty({
             <div className="budget-foot muted small">
               <span>
                 Real {formatMoney(r.real)}
-                {r.label === 'Necesidades' && loanInstallments > 0 && (
-                  <> · {formatMoney(loanInstallments)} en cuotas de préstamos</>
+                {r.label === 'Necesidades' && loanReal > 0 && (
+                  <> · {formatMoney(loanReal)} en cuotas de préstamos</>
                 )}
               </span>
               <span>
