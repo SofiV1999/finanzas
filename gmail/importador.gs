@@ -41,6 +41,21 @@ function probar() {
   importar_(30, false)
 }
 
+// Lista remitente y asunto de los correos de los bancos que no se importan
+function verIgnorados() {
+  for (const hilo of GmailApp.search(`${BUSQUEDA} newer_than:31d`, 0, 300)) {
+    for (const correo of hilo.getMessages()) {
+      const alerta = leerCorreo({
+        from: correo.getFrom(),
+        subject: correo.getSubject(),
+        body: correo.getPlainBody(),
+        date: correo.getDate().toISOString(),
+      })
+      if (!alerta) console.log(`${correo.getFrom()} | ${correo.getSubject()}`)
+    }
+  }
+}
+
 function importar_(dias, enviar) {
   const props = PropertiesService.getScriptProperties()
   const enviados = JSON.parse(props.getProperty('ENVIADOS') || '[]')
