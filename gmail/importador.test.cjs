@@ -43,6 +43,10 @@ caso('montos en los formatos de los bancos', () => {
   assert.equal(leerMonto_('$2.170.218,00'), 2170218)
   assert.equal(leerMonto_('2,395'), 2395)
   assert.equal(leerMonto_('12.50'), 12.5)
+  assert.equal(leerMonto_('2,392.5'), 2392.5)
+  assert.equal(leerMonto_('15.5'), 15.5)
+  assert.equal(leerMonto_('1.234,5'), 1234.5)
+  assert.equal(leerMonto_('$1.234.567'), 1234567)
 })
 
 caso('Bancolombia: compra con tarjeta de crédito', () => {

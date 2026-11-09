@@ -126,16 +126,18 @@ function leerCorreo(correo) {
   return alerta
 }
 
-// "COP24.490,00", "$26,100", "$39,600.00", "$93.558,00", "2,395": si el último separador
-// tiene 2 dígitos después son centavos; si no, todos los separadores son de miles
+// "COP24.490,00", "$26,100", "$39,600.00", "$93.558,00", "2,395", "2,392.5": si el último
+// separador tiene 1 o 2 dígitos después son decimales; si no, todos los separadores son de miles
 function leerMonto_(texto) {
   const limpio = String(texto)
     .replace(/[^\d.,]/g, '')
     .replace(/[.,]$/, '')
   if (!limpio) return null
-  const centavos = /[.,](\d{2})$/.exec(limpio)
+  const centavos = /[.,](\d{1,2})$/.exec(limpio)
   const valor = centavos
-    ? Number(`${limpio.slice(0, -3).replace(/[.,]/g, '')}.${centavos[1]}`)
+    ? Number(
+        `${limpio.slice(0, -centavos[0].length).replace(/[.,]/g, '')}.${centavos[1]}`,
+      )
     : Number(limpio.replace(/[.,]/g, ''))
   return valor > 0 ? valor : null
 }
