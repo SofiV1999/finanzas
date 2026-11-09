@@ -302,3 +302,42 @@ export function analyzeLumpSum(
 
   return { base, options, allocation, allocationResult: currentResult }
 }
+
+type GoalLike = {
+  id: string
+  target_amount: number
+  currency: 'COP' | 'USD'
+  account_id: string | null
+}
+type GoalAccount = { id: string; balance: number; currency: 'COP' | 'USD' }
+
+// Avance de cada meta: el saldo de su cuenta, en la moneda de la meta. Si varias metas usan la
+// misma cuenta, el saldo se reparte en el orden de `goals` (de la más antigua a la más nueva):
+// cada una se llena hasta su objetivo y lo que sobra pasa a la siguiente; la última se queda con
+// el resto.
+export function goalProgress(
+  goals: GoalLike[],
+  accounts: GoalAccount[],
+  usdRate: number | null | undefined,
+) {
+  const progress = new Map<string, number>()
+  for (const account of accounts) {
+    const shared = goals.filter((g) => g.account_id === account.id)
+    let remaining = account.balance
+    shared.forEach((g, i) => {
+      const same = g.currency === account.currency
+      if (!same && !usdRate) return progress.set(g.id, 0)
+      // De la moneda de la cuenta a la de la meta y al revés
+      const toGoal = (v: number) => (same ? v : g.currency === 'COP' ? v * usdRate! : v / usdRate!)
+      const toAccount = (v: number) =>
+        same ? v : g.currency === 'COP' ? v / usdRate! : v * usdRate!
+      const take =
+        i === shared.length - 1
+          ? remaining
+          : Math.max(0, Math.min(remaining, toAccount(g.target_amount)))
+      remaining -= take
+      progress.set(g.id, toGoal(take))
+    })
+  }
+  return progress
+}

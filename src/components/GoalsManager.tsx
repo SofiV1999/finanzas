@@ -3,6 +3,7 @@ import { annualProvision, monthlyEquivalent } from '../lib/budget'
 import { plannedIncomeCop, useData } from '../lib/data'
 import { formatMonth, todayIso } from '../lib/dates'
 import {
+  goalProgress,
   monthLabelFromNow,
   monthsToReach,
   monthsUntil,
@@ -37,16 +38,6 @@ export default function GoalsManager() {
     }
   }, [version])
 
-  // Saldo de la cuenta vinculada, expresado en la moneda de la meta
-  function progressOf(goal: Goal) {
-    const account = accounts.find((a) => a.id === goal.account_id)
-    if (!account) return 0
-    if (account.currency === goal.currency) return account.balance
-    const rate = latestTrm?.rate
-    if (!rate) return 0
-    return goal.currency === 'COP' ? account.balance * rate : account.balance / rate
-  }
-
   // Sugerencia de fondo de emergencia: 6 meses de gastos presupuestados (o del ingreso)
   const monthlyExpenses = monthlyEquivalent(categories)
   const emergencyTarget = 6 * (monthlyExpenses || plannedIncomeCop(settings))
@@ -54,6 +45,8 @@ export default function GoalsManager() {
   const annualTotal = annualProvision(categories) * 12
 
   const visible = goals.filter((g) => !g.archived)
+  // Saldo de la cuenta vinculada, en la moneda de la meta (repartido si la comparten varias)
+  const progress = goalProgress(visible, accounts, latestTrm?.rate)
   const suggestions = [
     { name: 'Fondo de emergencia', target_amount: Math.round(emergencyTarget) || undefined },
     ...(annualTotal > 0
@@ -82,7 +75,15 @@ export default function GoalsManager() {
 
       <div className="goal-list">
         {visible.map((g) => (
-          <GoalRow key={g.id} goal={g} current={progressOf(g)} onEdit={() => setEditing(g)} />
+          <GoalRow
+            key={g.id}
+            goal={g}
+            current={progress.get(g.id) ?? 0}
+            sharedWith={visible
+              .filter((o) => o.id !== g.id && g.account_id && o.account_id === g.account_id)
+              .map((o) => o.name)}
+            onEdit={() => setEditing(g)}
+          />
         ))}
       </div>
 
@@ -122,10 +123,12 @@ const groupDigits = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 })
 function GoalRow({
   goal: g,
   current,
+  sharedWith,
   onEdit,
 }: {
   goal: Goal
   current: number
+  sharedWith: string[]
   onEdit: () => void
 }) {
   const { accounts } = useData()
@@ -175,6 +178,8 @@ function GoalRow({
         {account ? `Cuenta: ${account.name}` : 'Sin cuenta vinculada: edítala para ver el avance'}
         {g.expected_return_ea > 0 &&
           ` · rendimiento ${(g.expected_return_ea * 100).toFixed(1)}% E.A.`}
+        {sharedWith.length > 0 &&
+          ` · comparte la cuenta con ${sharedWith.join(', ')}: el saldo llena primero la meta más antigua`}
       </div>
       {!reached && required != null && (
         <p className="small goal-plan">

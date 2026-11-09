@@ -174,6 +174,7 @@ export default function ImportInbox() {
         if (error) throw new Error(error.message)
       }
       await markApproved(group, tx.id)
+      await registerFee(group, tx)
     })
 
   // Asigna los dígitos de la alerta a una de tus cuentas
@@ -232,27 +233,41 @@ export default function ImportInbox() {
     setReviewing({ group, preset })
   }
 
+  // Comisión que el banco descontó (p. ej. ARQ): gasto en la cuenta donde quedó la plata, salvo
+  // que ya esté registrada ese día con el mismo monto
+  async function registerFee(group: ImportGroup, tx: Omit<Transaction, 'id'>) {
+    const item = group.items[0]
+    if (!item.fee || group.paired) return
+    const feeCategory = categories.find(
+      (c) => c.kind === 'gasto' && c.name === 'Intereses y comisiones' && !c.archived,
+    )
+    if (!feeCategory) return
+    const accountId = item.direction === 'in' && tx.to_account_id ? tx.to_account_id : tx.account_id
+    const already = recent.some(
+      (t) =>
+        t.type === 'gasto' &&
+        t.account_id === accountId &&
+        t.date === tx.date &&
+        Math.abs(t.amount - item.fee!) < 0.01,
+    )
+    if (already) return
+    const { error } = await supabase.from('transactions').insert({
+      date: tx.date,
+      type: 'gasto',
+      account_id: accountId,
+      amount: item.fee,
+      category_id: feeCategory.id,
+      fx_rate: tx.fx_rate,
+      description: `Comisión ${bankLabels[item.bank] ?? item.bank}`,
+    })
+    // El movimiento ya quedó guardado: un error aquí solo se avisa, sin cortar lo demás
+    if (error) setError(`No se pudo registrar la comisión: ${error.message}`)
+  }
+
   // Después de guardar desde el formulario: se aprueba, se registra la comisión y se aprende
   async function afterSave(group: ImportGroup, saved: SavedTransaction) {
     await markApproved(group, saved.id)
-    const item = group.items[0]
-    if (item.fee && !group.paired) {
-      const feeCategory = categories.find(
-        (c) => c.kind === 'gasto' && c.name === 'Intereses y comisiones' && !c.archived,
-      )
-      if (feeCategory) {
-        await supabase.from('transactions').insert({
-          date: saved.date,
-          type: 'gasto',
-          account_id:
-            item.direction === 'in' && saved.to_account_id ? saved.to_account_id : saved.account_id,
-          amount: item.fee,
-          category_id: feeCategory.id,
-          fx_rate: saved.fx_rate,
-          description: `Comisión ${bankLabels[item.bank] ?? item.bank}`,
-        })
-      }
-    }
+    await registerFee(group, saved)
     await learn(group, saved)
   }
 

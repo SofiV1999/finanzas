@@ -6,6 +6,7 @@ import TransactionForm, { type TransactionPreset } from '../components/Transacti
 import { effectiveBudget } from '../lib/budget'
 import { toCop, useData } from '../lib/data'
 import { addMonths, currentMonthIso, formatDay, formatMonth, todayIso } from '../lib/dates'
+import { goalProgress } from '../lib/finance'
 import { formatMoney, formatPct } from '../lib/format'
 import { occurrenceIn, pendingConfirmations, presetFor } from '../lib/recurring'
 import {
@@ -119,14 +120,8 @@ export default function Resumen() {
   const accountById = new Map(accounts.map((a) => [a.id, a]))
   const categoryName = new Map(categories.map((c) => [c.id, c.name]))
 
-  function goalProgress(g: Goal) {
-    const a = accounts.find((x) => x.id === g.account_id)
-    if (!a) return 0
-    if (a.currency === g.currency) return a.balance
-    const rate = latestTrm?.rate
-    if (!rate) return 0
-    return g.currency === 'COP' ? a.balance * rate : a.balance / rate
-  }
+  // Saldo de la cuenta de cada meta (repartido si varias comparten cuenta)
+  const progress = goalProgress(goals, accounts, latestTrm?.rate)
 
   const savingsRate =
     thisMonth && thisMonth.income > 0 ? thisMonth.savings / thisMonth.income : null
@@ -350,7 +345,7 @@ export default function Resumen() {
             <p className="muted small">Aún no tienes metas. Créalas en Ahorros y metas.</p>
           ) : (
             goals.map((g) => {
-              const current = goalProgress(g)
+              const current = progress.get(g.id) ?? 0
               const pct = Math.max(0, Math.min(1, current / g.target_amount))
               return (
                 <div key={g.id} className="mini-row">

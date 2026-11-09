@@ -268,6 +268,20 @@ function AccountForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [type, setType] = useState<AccountType>(initial?.type ?? types[mode === 'deudas' ? 0 : 1])
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? 'COP')
+  // Con movimientos, la moneda no se puede cambiar: sus montos están en la moneda actual
+  const [hasMovements, setHasMovements] = useState(false)
+  useEffect(() => {
+    if (!initial) return
+    let cancelled = false
+    supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .or(`account_id.eq.${initial.id},to_account_id.eq.${initial.id}`)
+      .then(({ count }) => !cancelled && setHasMovements((count ?? 0) > 0))
+    return () => {
+      cancelled = true
+    }
+  }, [initial])
   // Las deudas se escriben en positivo y se guardan en negativo
   const [opening, setOpening] = useState(
     initial
@@ -309,6 +323,9 @@ function AccountForm({
     ]
     if (digits.trim() && digitList.length === 0) {
       return setError('Escribe los últimos 4 dígitos, p. ej. 1234 o 1234, 5678.')
+    }
+    if (hasMovements && initial && currency !== initial.currency) {
+      return setError('Esta cuenta tiene movimientos: su moneda no se puede cambiar.')
     }
     const row = {
       name: name.trim(),
@@ -400,11 +417,17 @@ function AccountForm({
             <select
               id="acc-currency"
               value={currency}
+              disabled={hasMovements}
               onChange={(e) => setCurrency(e.target.value as Currency)}
             >
               <option value="COP">Pesos (COP)</option>
               <option value="USD">Dólares (USD)</option>
             </select>
+            {hasMovements && (
+              <small className="muted">
+                Tiene movimientos en {currency}: para la otra moneda crea una cuenta nueva
+              </small>
+            )}
           </div>
         </div>
         <div className="grid-2">
